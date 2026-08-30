@@ -1,0 +1,64 @@
+name: Build Windows App
+
+# Runs when you push a version tag (v2.6.0, v2.6.1, ...) and can also be
+# started by hand from the Actions tab.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Build the installer
+        run: tauri build
+
+      # The bundler writes to a versioned path, so collect the artefacts
+      # into one predictable folder before uploading.
+      - name: Collect installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Include *.msi,*.exe |
+            ForEach-Object { Copy-Item $_.FullName -Destination out }
+          Get-ChildItem out
+
+      - name: Upload as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZoltanStudios-TestTag-Windows
+          path: out/*
+
+      # When triggered by a tag, also publish a Release so there's a
+      # permanent download link rather than a 90-day artifact.
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
