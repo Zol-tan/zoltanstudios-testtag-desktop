@@ -1,7 +1,5 @@
 name: Build Windows App
 
-# Runs when you push a version tag (v2.6.0, v2.6.1, ...) and can also be
-# started by hand from the Actions tab.
 on:
   push:
     tags:
@@ -34,23 +32,42 @@ jobs:
 
       - name: Install the Tauri CLI
         run: npm install -g @tauri-apps/cli@^2
-        
-      - name: Install WIX Toolset
-        run: |dotnet tool install --global wix 
-        wix extension add WixToolset.UI.wixext
-  
-      - name: Build the installer
-        run: tauri build
 
-      # The bundler writes to a versioned path, so collect the artefacts
-      # into one predictable folder before uploading.
+      - name: Build NSIS installer
+        run: tauri build --verbose --bundles nsis
+
+      - name: Build MSI installer
+        id: msi
+        continue-on-error: true
+        run: tauri build --verbose --bundles msi
+
+      - name: Diagnose WiX failure
+        if: steps.msi.outcome == 'failure'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $wxs = Get-ChildItem -Path src-tauri/target/release/wix -Recurse -Filter main.wxs -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($wxs) {
+            Write-Host "===== main.wxs ====="
+            Get-Content $wxs.FullName
+            $candle = "$env:LOCALAPPDATA\tauri\WixTools314\candle.exe"
+            if (Test-Path $candle) {
+              Write-Host "===== candle.exe output ====="
+              & $candle -nologo -arch x64 -out "$env:TEMP\out.wixobj" $wxs.FullName 2>&1 | Write-Host
+            }
+          } else {
+            Write-Host "main.wxs was not generated."
+          }
+
       - name: Collect installers
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Include *.msi,*.exe |
-            ForEach-Object { Copy-Item $_.FullName -Destination out }
-          Get-ChildItem out
+          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Include *.msi,*.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName -Destination out -Force }
+          $found = Get-ChildItem out -ErrorAction SilentlyContinue
+          if (-not $found) { Write-Error "No installers were produced."; exit 1 }
+          $found | ForEach-Object { Write-Host $_.Name ("{0:N1} MB" -f ($_.Length/1MB)) }
 
       - name: Upload as a workflow artifact
         uses: actions/upload-artifact@v4
@@ -58,8 +75,6 @@ jobs:
           name: ZoltanStudios-TestTag-Windows
           path: out/*
 
-      # When triggered by a tag, also publish a Release so there's a
-      # permanent download link rather than a 90-day artifact.
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
