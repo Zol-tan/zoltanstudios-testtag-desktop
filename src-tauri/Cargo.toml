@@ -6,6 +6,11 @@ authors = ["ZoltanStudios"]
 edition = "2021"
 rust-version = "1.77"
 
+# Mobile targets build the app as a library and link it into the native shell.
+[lib]
+name = "zoltanstudios_testtag_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
