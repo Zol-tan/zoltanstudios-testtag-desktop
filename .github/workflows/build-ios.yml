@@ -1,0 +1,92 @@
+name: Build iOS App
+
+# Builds an UNSIGNED iOS app on a macOS runner. Signing happens afterwards on
+# a Mac using your Apple Developer account — see IOS-SETUP.md.
+#
+# macOS runners are free for public repositories. On a private repo they bill
+# at 10x the Linux rate, so keep this repo public or expect a real cost.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "ios-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust with iOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # Generates src-tauri/gen/apple (the Xcode project) if it isn't
+      # committed. Safe to run when it already exists.
+      - name: Initialise the iOS project
+        run: tauri ios init
+        continue-on-error: true
+
+      # Build without signing. The runner has no certificates, so signing is
+      # explicitly disabled and done later on your own Mac.
+      - name: Build unsigned iOS app
+        run: |
+          tauri ios build --verbose --export-method debugging || \
+          xcodebuild -project src-tauri/gen/apple/*.xcodeproj \
+            -scheme zoltanstudios-testtag_iOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      # Package whatever .app was produced into an .ipa layout so it can be
+      # signed and installed later.
+      - name: Package as unsigned IPA
+        run: |
+          set -e
+          APP=$(find . -name "*.app" -type d -path "*iphoneos*" | head -n 1)
+          if [ -z "$APP" ]; then APP=$(find . -name "*.app" -type d | head -n 1); fi
+          if [ -z "$APP" ]; then echo "No .app bundle was produced."; exit 1; fi
+          echo "Found: $APP"
+          rm -rf out Payload
+          mkdir -p Payload out
+          cp -R "$APP" Payload/
+          zip -qry out/ZoltanStudios-TestTag-unsigned.ipa Payload
+          ls -lh out
+
+      - name: Upload the unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZoltanStudios-TestTag-iOS-unsigned
+          path: out/*.ipa
+
+      # Keep the Xcode project so you can open it directly on your Mac —
+      # often the easiest route to signing and installing.
+      - name: Upload the Xcode project
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-project
+          path: src-tauri/gen/apple
+          if-no-files-found: ignore

@@ -1,5 +1,7 @@
 name: Build Windows App
 
+# Runs when you push a version tag (v2.6.0, v2.6.1, ...) and can also be
+# started by hand from the Actions tab.
 on:
   push:
     tags:
@@ -33,14 +35,20 @@ jobs:
       - name: Install the Tauri CLI
         run: npm install -g @tauri-apps/cli@^2
 
+      # Build only the NSIS installer first. NSIS is more forgiving than WiX
+      # and gets us a working .exe even if the MSI path has issues.
       - name: Build NSIS installer
         run: tauri build --verbose --bundles nsis
 
+      # MSI via WiX. Allowed to fail so a WiX problem doesn't block the
+      # release - the NSIS installer above is a complete, usable installer.
       - name: Build MSI installer
         id: msi
         continue-on-error: true
         run: tauri build --verbose --bundles msi
 
+      # If WiX failed, print the generated XML and run candle by hand so the
+      # real parser error appears in the log instead of a bare exit code.
       - name: Diagnose WiX failure
         if: steps.msi.outcome == 'failure'
         shell: pwsh
@@ -59,6 +67,8 @@ jobs:
             Write-Host "main.wxs was not generated."
           }
 
+      # The bundler writes to a versioned path, so collect the artefacts
+      # into one predictable folder before uploading.
       - name: Collect installers
         shell: pwsh
         run: |
@@ -75,10 +85,11 @@ jobs:
           name: ZoltanStudios-TestTag-Windows
           path: out/*
 
+      # When triggered by a tag, also publish a Release so there's a
+      # permanent download link rather than a 90-day artifact.
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: out/*
           generate_release_notes: true
-
