@@ -434,3 +434,54 @@ function qrDataUri(text) {
 // all of them plus the server-held jobs, so a browser wipe, a new laptop, or
 // a bad upgrade can't lose real client records.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Emailing a certificate to the client.
+//
+// The document HTML is built here and posted to the server, so what the
+// client receives is exactly what the tester saw on screen. Auth follows the
+// same session-then-token pattern as the rest of the sync layer.
+// ---------------------------------------------------------------------------
+async function emailDocumentToClient(job, opts) {
+  const cfg = loadServerConfig();
+  const base = (cfg.url || "").replace(/\/+$/, "");
+  if (!base) throw new Error("No server configured.");
+
+  const kind = (opts && opts.kind) || "certificate";
+  const html =
+    kind === "record" ? buildRecordHTML(job) :
+    kind === "generator" ? buildGeneratorReportHTML(job) :
+    buildCertificateHTML(job);
+
+  const payload = {
+    to: (opts && opts.to) || job.clientEmail || "",
+    kind: kind,
+    html: html,
+    certNumber: job.certNumber || "",
+    clientName: job.clientName || "",
+    siteAddress: job.siteAddress || "",
+    nextTestDue: formatDisplayDate(addMonths(job.testDate, job.retestMonths)) || "",
+    message: (opts && opts.message) || "",
+  };
+
+  const post = async (headers) => {
+    const res = await fetch(base + "/api/email.php?action=send", {
+      method: "POST",
+      credentials: "include",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify(payload),
+    });
+    const d = await res.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || "The email could not be sent.");
+    return d.data || d;
+  };
+
+  // Session first (browser on the site), then token (desktop / mobile shell).
+  try {
+    const csrf = await getCsrf(base);
+    return await post({ "X-CSRF-Token": csrf });
+  } catch (sessionErr) {
+    if (!cfg.token) throw sessionErr;
+    return await post({ "Authorization": "Bearer " + cfg.token });
+  }
+}

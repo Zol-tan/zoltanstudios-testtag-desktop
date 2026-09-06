@@ -2442,6 +2442,57 @@ function qrDataUri(text) {
 // a bad upgrade can't lose real client records.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Emailing a certificate to the client.
+//
+// The document HTML is built here and posted to the server, so what the
+// client receives is exactly what the tester saw on screen. Auth follows the
+// same session-then-token pattern as the rest of the sync layer.
+// ---------------------------------------------------------------------------
+async function emailDocumentToClient(job, opts) {
+  const cfg = loadServerConfig();
+  const base = (cfg.url || "").replace(/\/+$/, "");
+  if (!base) throw new Error("No server configured.");
+
+  const kind = (opts && opts.kind) || "certificate";
+  const html =
+    kind === "record" ? buildRecordHTML(job) :
+    kind === "generator" ? buildGeneratorReportHTML(job) :
+    buildCertificateHTML(job);
+
+  const payload = {
+    to: (opts && opts.to) || job.clientEmail || "",
+    kind: kind,
+    html: html,
+    certNumber: job.certNumber || "",
+    clientName: job.clientName || "",
+    siteAddress: job.siteAddress || "",
+    nextTestDue: formatDisplayDate(addMonths(job.testDate, job.retestMonths)) || "",
+    message: (opts && opts.message) || "",
+  };
+
+  const post = async (headers) => {
+    const res = await fetch(base + "/api/email.php?action=send", {
+      method: "POST",
+      credentials: "include",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify(payload),
+    });
+    const d = await res.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || "The email could not be sent.");
+    return d.data || d;
+  };
+
+  // Session first (browser on the site), then token (desktop / mobile shell).
+  try {
+    const csrf = await getCsrf(base);
+    return await post({ "X-CSRF-Token": csrf });
+  } catch (sessionErr) {
+    if (!cfg.token) throw sessionErr;
+    return await post({ "Authorization": "Bearer " + cfg.token });
+  }
+}
+
 // ======================================================================
 // 11-backup.js
 // Backup and restore
@@ -5235,7 +5286,11 @@ function ReportView({
   className: "inline-flex items-center gap-2 border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm"
 }, /*#__PURE__*/React.createElement(FileText, {
   size: 15
-}), " Generator Report"), /*#__PURE__*/React.createElement("button", {
+}), " Generator Report"), (function () {
+  return React.createElement(EmailCertButton, {
+    job: job
+  });
+})(), /*#__PURE__*/React.createElement("button", {
     onClick: () => downloadSingleFile(buildRecordHTML(job), "record.html"),
     className: "inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm",
     title: "Download the full working record as a single HTML file"
@@ -5440,6 +5495,127 @@ function ReportView({
 // ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
+
+function EmailCertButton({
+  job
+}) {
+  var o = React.useState(false);
+  var open = o[0],
+    setOpen = o[1];
+  var t = React.useState(job.clientEmail || '');
+  var to = t[0],
+    setTo = t[1];
+  var m = React.useState('');
+  var msg = m[0],
+    setMsg = m[1];
+  var k = React.useState(job.jobType === 'generator_inspection' ? 'generator' : 'certificate');
+  var kind = k[0],
+    setKind = k[1];
+  var b = React.useState(false);
+  var busy = b[0],
+    setBusy = b[1];
+  var e = React.useState('');
+  var err = e[0],
+    setErr = e[1];
+  var d = React.useState('');
+  var done = d[0],
+    setDone = d[1];
+  function send() {
+    setBusy(true);
+    setErr('');
+    setDone('');
+    emailDocumentToClient(job, {
+      to: to.trim(),
+      message: msg.trim(),
+      kind: kind
+    }).then(function (r) {
+      setDone('Sent to ' + r.to);
+      setTimeout(function () {
+        setOpen(false);
+        setDone('');
+      }, 1800);
+    }).catch(function (ex) {
+      setErr(ex.message);
+    }).finally(function () {
+      setBusy(false);
+    });
+  }
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    onClick: function () {
+      setOpen(true);
+    },
+    title: "Email this document to the client",
+    className: "inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm"
+  }, "\u2709 Email to client"), open && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden",
+    onClick: function () {
+      if (!busy) setOpen(false);
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-white rounded-2xl shadow-2xl w-full max-w-md",
+    onClick: function (ev) {
+      ev.stopPropagation();
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-5 border-b border-slate-200"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "font-bold text-slate-900 text-lg"
+  }, "Email to client"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mt-0.5"
+  }, "The document is attached as a file they can open in any browser.")), /*#__PURE__*/React.createElement("div", {
+    className: "p-5 space-y-3"
+  }, err && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+  }, err), done && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"
+  }, done), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
+  }, "To"), /*#__PURE__*/React.createElement("input", {
+    type: "email",
+    value: to,
+    placeholder: "client@example.com",
+    onChange: function (ev) {
+      setTo(ev.target.value);
+    },
+    className: "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
+  }, "Document"), /*#__PURE__*/React.createElement("select", {
+    value: kind,
+    onChange: function (ev) {
+      setKind(ev.target.value);
+    },
+    className: "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "certificate"
+  }, "Compliance certificate"), job.jobType === 'generator_inspection' && /*#__PURE__*/React.createElement("option", {
+    value: "generator"
+  }, "Generator inspection report"), /*#__PURE__*/React.createElement("option", {
+    value: "record"
+  }, "Full job record (internal detail)"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
+  }, "Message (optional)"), /*#__PURE__*/React.createElement("textarea", {
+    value: msg,
+    rows: 3,
+    placeholder: "e.g. Two items failed and were removed from service - details are in the certificate.",
+    onChange: function (ev) {
+      setMsg(ev.target.value);
+    },
+    className: "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-4 border-t border-slate-100 flex justify-end gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: function () {
+      setOpen(false);
+    },
+    disabled: busy,
+    className: "text-sm text-slate-500 hover:text-slate-700 px-4 py-2"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: send,
+    disabled: busy || !to.trim(),
+    className: "bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold px-5 py-2 rounded-lg"
+  }, busy ? "Sending\u2026" : "Send email")))));
+}
 
 // ======================================================================
 // 17-app.js
