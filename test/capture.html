@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>Capture — ZoltanStudios</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+    background:#0f172a;color:#e2e8f0;min-height:100vh;
+    padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
+  .brand{font-size:15px;font-weight:700}
+  .sub{font-size:11px;color:#64748b}
+
+  .card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px;margin-bottom:14px}
+  h2{font-size:14px;font-weight:700;margin-bottom:4px}
+  .hint{font-size:12px;color:#94a3b8;line-height:1.5}
+
+  button{font-family:inherit;border:0;border-radius:11px;font-weight:600;font-size:15px;cursor:pointer}
+  .big{width:100%;padding:16px;background:#2563eb;color:#fff;margin-top:12px}
+  .big:active{background:#1d4ed8}
+  .big.grey{background:#334155;color:#e2e8f0}
+  .big.green{background:#059669}
+  .big:disabled{opacity:.5}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .row button{flex:1;padding:12px}
+
+  input[type=file]{display:none}
+
+  /* Signature pad */
+  #padWrap{background:#fff;border-radius:11px;margin-top:12px;overflow:hidden}
+  #pad{display:block;width:100%;height:200px;touch-action:none}
+
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid #334155}
+
+  #toast{
+    position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));
+    background:#059669;color:#fff;padding:13px 16px;border-radius:11px;
+    font-size:14px;font-weight:600;text-align:center;display:none;z-index:99
+  }
+  #toast.err{background:#b91c1c}
+  .center{text-align:center;padding:40px 16px}
+  .center .icon{font-size:40px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Z</div>
+  <div>
+    <div class="brand">ZoltanStudios</div>
+    <div class="sub">Photo &amp; Signature Capture</div>
+  </div>
+</header>
+
+<div id="app"><div class="center"><div class="hint">Checking link…</div></div></div>
+<div id="toast"></div>
+
+<script>
+var TOKEN = new URLSearchParams(location.search).get('t') || '';
+var JOB = null;
+var sent = [];
+
+function toast(msg, isErr) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = isErr ? 'err' : '';
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(function(){ t.style.display = 'none'; }, 2600);
+}
+
+function fail(msg) {
+  document.getElementById('app').innerHTML =
+    '<div class="center"><div class="icon">\u26A0\uFE0F</div>' +
+    '<h2 style="margin-bottom:8px">Link not valid</h2>' +
+    '<div class="hint">' + msg + '</div></div>';
+}
+
+// ---- Shrink big phone photos before upload -------------------------
+function downscale(file, maxDim, quality) {
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function () {
+      var w = img.width, h = img.height;
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.round(w * scale);
+      c.height = Math.round(h * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+    img.src = url;
+  });
+}
+
+function upload(kind, dataUrl, note) {
+  var body = new URLSearchParams();
+  body.set('token', TOKEN);
+  body.set('kind', kind);
+  body.set('data', dataUrl);
+  if (note) body.set('note', note);
+  return fetch('api/capture.php?action=upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) throw new Error((d && d.error) || 'Upload failed.');
+    return d;
+  });
+}
+
+function addThumb(src) {
+  sent.push(src);
+  var box = document.getElementById('thumbs');
+  if (!box) return;
+  var i = document.createElement('img');
+  i.className = 'thumb';
+  i.src = src;
+  box.appendChild(i);
+}
+
+// ---- Signature pad --------------------------------------------------
+function initPad() {
+  var c = document.getElementById('pad');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var drawing = false, dirty = false;
+
+  function size() {
+    var r = c.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    c.width = r.width * dpr;
+    c.height = r.height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+  }
+  size();
+  window.addEventListener('resize', function(){ var d = dirty; size(); if(!d) clear(); });
+
+  function pos(e) {
+    var r = c.getBoundingClientRect();
+    var p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  }
+  function start(e){ e.preventDefault(); drawing = true; dirty = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
+  function move(e){ if(!drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }
+  function end(){ drawing = false; }
+
+  c.addEventListener('pointerdown', start);
+  c.addEventListener('pointermove', move);
+  c.addEventListener('pointerup', end);
+  c.addEventListener('pointercancel', end);
+  c.addEventListener('pointerleave', end);
+
+  function clear(){ ctx.clearRect(0,0,c.width,c.height); dirty = false; }
+
+  document.getElementById('sigClear').onclick = clear;
+  document.getElementById('sigSend').onclick = function () {
+    if (!dirty) { toast('Please sign first.', true); return; }
+    var btn = this; btn.disabled = true; btn.textContent = 'Sending…';
+    // Flatten onto white so it prints properly on the certificate
+    var out = document.createElement('canvas');
+    out.width = c.width; out.height = c.height;
+    var octx = out.getContext('2d');
+    octx.fillStyle = '#fff'; octx.fillRect(0,0,out.width,out.height);
+    octx.drawImage(c, 0, 0);
+    var url = out.toDataURL('image/png');
+    upload('signature', url, document.getElementById('sigName').value.trim())
+      .then(function(){ toast('Signature sent to laptop'); addThumb(url); clear(); })
+      .catch(function(e){ toast(e.message, true); })
+      .finally(function(){ btn.disabled = false; btn.textContent = 'Send signature'; });
+  };
+}
+
+// ---- Render ---------------------------------------------------------
+function render() {
+  document.getElementById('app').innerHTML =
+    '<div class="card">' +
+      '<h2>\uD83D\uDCF7 Photo</h2>' +
+      '<div class="hint">Take a photo of a fault, a damaged cord, or the site. It appears on the laptop within a few seconds.</div>' +
+      '<input type="file" id="camIn" accept="image/*" capture="environment">' +
+      '<input type="file" id="libIn" accept="image/*">' +
+      '<button class="big" id="camBtn">Take photo</button>' +
+      '<button class="big grey" id="libBtn" style="margin-top:8px">Choose from library</button>' +
+    '</div>' +
+    '<div class="card">' +
+      '<h2>\u270D\uFE0F Client signature</h2>' +
+      '<div class="hint">Hand the phone to the client and have them sign below.</div>' +
+      '<input id="sigName" placeholder="Name of signatory (optional)" ' +
+        'style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:15px">' +
+      '<div id="padWrap"><canvas id="pad"></canvas></div>' +
+      '<div class="row">' +
+        '<button class="big grey" id="sigClear" style="margin-top:0">Clear</button>' +
+        '<button class="big green" id="sigSend" style="margin-top:0">Send signature</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<h2>Sent this session</h2>' +
+      '<div class="hint">Keep this page open while you work. The link expires after an hour.</div>' +
+      '<div class="thumbs" id="thumbs"></div>' +
+    '</div>';
+
+  function handleFile(input) {
+    var f = input.files && input.files[0];
+    if (!f) return;
+    toast('Uploading…');
+    downscale(f, 1600, 0.82)
+      .then(function (url) { return upload('photo', url).then(function(){ return url; }); })
+      .then(function (url) { toast('Photo sent to laptop'); addThumb(url); })
+      .catch(function (e) { toast(e.message, true); })
+      .finally(function () { input.value = ''; });
+  }
+
+  document.getElementById('camBtn').onclick = function(){ document.getElementById('camIn').click(); };
+  document.getElementById('libBtn').onclick = function(){ document.getElementById('libIn').click(); };
+  document.getElementById('camIn').onchange = function(){ handleFile(this); };
+  document.getElementById('libIn').onchange = function(){ handleFile(this); };
+
+  initPad();
+}
+
+// ---- Boot -----------------------------------------------------------
+if (!TOKEN) {
+  fail('No capture code in this link. Scan the QR code shown on the laptop.');
+} else {
+  fetch('api/capture.php?action=session&token=' + encodeURIComponent(TOKEN))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || 'This link is not valid.');
+      JOB = (d.data && d.data.jobId) || (d.jobId);
+      render();
+    })
+    .catch(function (e) { fail(e.message); });
+}
+</script>
+</body>
+</html>

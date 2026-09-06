@@ -1,0 +1,20 @@
+[
+  "00-preamble.js",
+  "01-icons.js",
+  "02-zip-download.js",
+  "03-templates.js",
+  "04-csv.js",
+  "05-zip-export.js",
+  "06-folder.js",
+  "07-qr-labels.js",
+  "08-appliance-db.js",
+  "09-storage.js",
+  "10-server-sync.js",
+  "11-backup.js",
+  "12-settings.js",
+  "13-job-model.js",
+  "14-job-list.js",
+  "15-job-form.js",
+  "16-report-view.js",
+  "17-app.js"
+]

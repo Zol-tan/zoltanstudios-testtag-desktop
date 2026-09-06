@@ -1,120 +1,69 @@
-# ZoltanStudios Test & Tag — Windows Desktop App
+# ZoltanStudios Test and Tag — source
 
-A native Windows wrapper around the hosted Test & Tag app. Internal use only.
-
-You never build anything on your own machine — GitHub builds the installer for
-you and gives you a download link.
-
----
-
-## How it works
-
-The desktop app is a native window that loads `zoltanstudios.au/testtag-app.html`.
-
-That matters for two reasons:
-
-- **Login and sync work exactly as they do now.** The PHP session cookie
-  behaves identically, so there's no CORS setup and no second auth path.
-- **Uploading new app files to cPanel updates the desktop app too.** No
-  rebuild, no reinstall. Same single-upload workflow you have today.
-
-The service worker still caches everything after the first successful load, so
-the app keeps working on site with no signal.
-
----
-
-## One-time setup
-
-### 1. Create the repository
-
-On GitHub: **New repository** → name it `zoltanstudios-testtag-desktop` →
-**Private** → Create.
-
-### 2. Push this folder to it
-
-With GitHub Desktop (easiest): **Add** → **Add existing repository** → pick this
-folder → **Publish repository**.
-
-Or from a terminal in this folder:
-
-```bash
-git init
-git add .
-git commit -m "Initial desktop wrapper"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/zoltanstudios-testtag-desktop.git
-git push -u origin main
-```
-
-### 3. Build it
-
-Two ways to trigger a build:
-
-**By hand** — repo → **Actions** tab → **Build Windows App** → **Run workflow**.
-
-**By tag** — this also publishes a permanent Release:
-
-```bash
-git tag v2.6.0
-git push origin v2.6.0
-```
-
-First build takes about 5–10 minutes (Rust compiles from scratch). Later builds
-are 2–3 minutes thanks to the cache.
-
-### 4. Download the installer
-
-- **Tagged build** → repo → **Releases** → download the `.msi`
-- **Manual build** → **Actions** → click the run → **Artifacts** at the bottom
-
-Two installers are produced: `.msi` (standard Windows installer) and a `.exe`
-(NSIS, slightly smaller). Either is fine — the `.msi` is the usual choice.
-
----
-
-## Installing on a work PC
-
-Run the `.msi`. Windows SmartScreen will warn that the publisher is unrecognised
-because the installer isn't code-signed — click **More info** → **Run anyway**.
-That's expected for an internal tool and only happens on install.
-
-Signing certificates run $200–400/year and are only worth it if you ever hand
-the installer to someone outside the business.
-
----
-
-## Making changes
-
-**Changing the app itself** (features, fixes) — upload to cPanel as usual. The
-desktop app picks it up on next launch. No rebuild needed.
-
-**Changing the wrapper** (window size, app name, icon) — edit
-`src-tauri/tauri.conf.json`, bump the `version`, push a new tag.
-
-**Pointing at a different URL** — edit `APP_URL` at the top of
-`src-tauri/src/main.rs`.
-
----
+The app used to exist only as a compiled bundle, which meant every change was
+a string-replacement patch into generated code. That's why fixes sometimes
+took two or three attempts to land. This is the same app, split into readable
+modules with a build step that verifies its own output.
 
 ## Layout
 
 ```
-.github/workflows/build.yml   The GitHub Actions build
-src-tauri/
-  tauri.conf.json             Window size, app name, installer settings
-  Cargo.toml                  Rust dependencies
-  build.rs                    Build script
-  src/main.rs                 Entry point — APP_URL is set here
-  icons/                      App and installer icons
-dist/index.html               Placeholder Tauri requires; not used at runtime
+modules/     the source, one file per area of the app
+build/
+  build.js     assembles modules -> dist/testtag-app.js
+  order.json   the order modules are concatenated in
+  tailwind.css tailwind entry point
+dist/        build output - this is what you upload
+test/        a runnable copy for checking changes locally
 ```
 
----
+## Building
+
+```
+node build/build.js          assemble and verify
+node build/build.js --css    also rebuild the stylesheet
+```
+
+The build **refuses to write a bundle that doesn't parse**, and checks that a
+list of expected functions is still present. A syntax error or an accidentally
+dropped module can't reach the server.
+
+## Making a change
+
+1. Edit the relevant file in `modules/`
+2. `node build/build.js --css`
+3. Test: `cd test && python3 -m http.server 8000`, open
+   `http://localhost:8000/testtag-app.html`
+4. Copy `dist/testtag-app.js` and `dist/testtag-app.css` into your upload
+5. Bump `CACHE_VERSION` in `sw.js` or installed PWA copies keep the old files
+
+## Where things live
+
+| Module | Contains |
+|---|---|
+| `01-icons.js` | Inline SVG icons |
+| `02-zip-download.js` | ZIP builder, downloads, desktop-shell detection |
+| `03-templates.js` | Logo, certificate, record and signature HTML |
+| `04-csv.js` | CSV cell escaping |
+| `05-zip-export.js` | Per-job ZIP export |
+| `06-folder.js` | Folder saving (File System Access API) |
+| `07-qr-labels.js` | A4 QR label sheet |
+| `08-appliance-db.js` | 280+ appliances, picker modal |
+| `09-storage.js` | localStorage keys, job persistence |
+| `10-server-sync.js` | Server config, push/pull, phone capture relay |
+| `11-backup.js` | Backup and restore |
+| `12-settings.js` | Tester defaults, retest scheduling, asset register |
+| `13-job-model.js` | Job/item model, tag numbering, carry-forward |
+| `14-job-list.js` | Job list, filters, backup buttons |
+| `15-job-form.js` | Job form, item table, generator panel |
+| `16-report-view.js` | In-app certificate view |
+| `17-app.js` | Root component, view routing, save/delete/copy |
 
 ## Notes
 
-Tauri uses the WebView2 runtime already present in Windows 10 and 11, so the
-installer is roughly 8–15MB rather than the ~150MB an Electron build would be.
-
-If a build fails, open the failed run under **Actions** and expand the red step
-— the error is usually in "Build the installer".
+- The modules are plain JS using `React.createElement` — no JSX, no transpile
+  step. What you edit is what ships.
+- No CDN dependencies. React and Tailwind are served from your own site
+  because Edge's tracking prevention blocks CDN scripts.
+- `/api/` requests are never cached by the service worker, so login and sync
+  always hit the live server.
