@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verify a Certificate — ZoltanStudios</title>
+<meta name="description" content="Check that a ZoltanStudios test and tag certificate is genuine and has not been altered." />
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+       background:#0f172a;color:#e2e8f0;min-height:100vh;padding:28px 16px 60px}
+  .wrap{max-width:560px;margin:0 auto}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+  .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#fff}
+  .brand{font-size:17px;font-weight:700}
+  .sub{font-size:11px;color:#64748b}
+
+  .card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:20px;margin-bottom:14px}
+  h1{font-size:19px;font-weight:700;margin-bottom:6px}
+  .lead{font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:16px}
+
+  label{display:block;font-size:11px;font-weight:700;color:#64748b;
+        text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  input[type=text],input[type=file]{width:100%;padding:11px 12px;border-radius:9px;
+        border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:15px}
+  input[type=text]{font-family:monospace;letter-spacing:.08em;text-transform:uppercase}
+  .field{margin-bottom:14px}
+  .hint{font-size:11px;color:#64748b;margin-top:5px;line-height:1.5}
+
+  button{width:100%;padding:13px;border:0;border-radius:10px;background:#2563eb;color:#fff;
+         font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+  button:hover{background:#1d4ed8}
+  button:disabled{opacity:.5;cursor:default}
+
+  .result{border-radius:12px;padding:18px;margin-bottom:14px}
+  .ok{background:#064e3b;border:1px solid #047857}
+  .warn{background:#78350f;border:1px solid #b45309}
+  .bad{background:#7f1d1d;border:1px solid #b91c1c}
+  .result h2{font-size:17px;margin-bottom:6px}
+  .result p{font-size:13px;line-height:1.6;opacity:.92}
+  table{width:100%;margin-top:12px;font-size:13px;border-collapse:collapse}
+  td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12)}
+  td:first-child{color:rgba(255,255,255,.6);width:44%}
+  tr:last-child td{border-bottom:0}
+
+  .note{font-size:11px;color:#64748b;line-height:1.6}
+  a{color:#60a5fa}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">Z</div>
+    <div>
+      <div class="brand">ZoltanStudios</div>
+      <div class="sub">Certificate Verification</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <h1>Verify a certificate</h1>
+    <p class="lead">
+      Enter the certificate number printed on the document. To also confirm the
+      file has not been altered since it was issued, attach the PDF as well.
+    </p>
+
+    <div class="field">
+      <label for="cert">Certificate number</label>
+      <input type="text" id="cert" placeholder="ZS123456" autocomplete="off" />
+    </div>
+
+    <div class="field">
+      <label for="file">Certificate PDF (optional)</label>
+      <input type="file" id="file" accept="application/pdf,.pdf" />
+      <p class="hint">
+        The file is never uploaded. It is fingerprinted in your browser and only
+        the fingerprint is checked against our records.
+      </p>
+    </div>
+
+    <button id="go">Verify</button>
+  </div>
+
+  <div id="out"></div>
+
+  <div class="card">
+    <p class="note">
+      A match confirms the document is the one issued under that certificate
+      number and has not been modified since. It is a tamper check, not a
+      cryptographic identity signature.
+      <br /><br />
+      Questions about a certificate? Email
+      <a href="mailto:zoltan@zoltanstudios.au">zoltan@zoltanstudios.au</a>.
+    </p>
+  </div>
+</div>
+
+<script>
+var out = document.getElementById('out');
+
+function esc(s){ return String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function show(cls, title, body, rows) {
+  var t = '';
+  if (rows && rows.length) {
+    t = '<table>' + rows.filter(function(r){ return r[1]; })
+      .map(function(r){ return '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; })
+      .join('') + '</table>';
+  }
+  out.innerHTML = '<div class="result ' + cls + '"><h2>' + title + '</h2><p>' + body + '</p>' + t + '</div>';
+}
+
+// SHA-256 in the browser, so the document itself never leaves the device.
+async function sha256(file) {
+  var buf = await file.arrayBuffer();
+  var digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+
+document.getElementById('go').addEventListener('click', async function () {
+  var btn = this;
+  var cert = document.getElementById('cert').value.trim().toUpperCase();
+  var f = document.getElementById('file').files[0];
+
+  if (!cert) { show('warn', 'Enter a certificate number', 'It is printed near the top of the certificate.'); return; }
+
+  btn.disabled = true; btn.textContent = 'Checking\u2026';
+  try {
+    var qs = 'certNumber=' + encodeURIComponent(cert);
+    if (f) {
+      if (!window.crypto || !crypto.subtle) {
+        throw new Error('This browser cannot fingerprint files. Try without the PDF, or use a different browser.');
+      }
+      qs += '&sha256=' + encodeURIComponent(await sha256(f));
+    }
+
+    var res = await fetch('api/verify.php?action=check&' + qs);
+    var d = await res.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || 'Could not check that certificate.');
+    var r = d.data || d;
+
+    if (!r.found) {
+      show('bad', 'Not found',
+        'No certificate with that number has been issued. Check for typos, or contact us if you believe it should be valid.');
+      return;
+    }
+
+    var rows = [
+      ['Certificate number', r.certNumber],
+      ['Test date', r.testDate],
+      ['Next test due', r.nextDue],
+      ['Site', r.site],
+    ];
+
+    if (r.hashMatches === true) {
+      show('ok', '\u2705 Genuine and unaltered',
+        'This certificate was issued by ZoltanStudios and the file you provided matches it exactly.', rows);
+    } else if (r.hashMatches === false) {
+      show('bad', '\u26A0\uFE0F Document does not match',
+        'A certificate with this number exists, but the file you provided is not the one issued. ' +
+        'It may have been edited, re-saved, or be a different version. Contact us before relying on it.', rows);
+    } else {
+      show('warn', '\u2713 Certificate number is valid',
+        'A certificate with this number was issued by ZoltanStudios. ' +
+        'To confirm the document itself has not been altered, attach the PDF and check again.', rows);
+    }
+  } catch (e) {
+    show('bad', 'Could not verify', esc(e.message));
+  } finally {
+    btn.disabled = false; btn.textContent = 'Verify';
+  }
+});
+
+// Deep link: /verify.html?c=ZS123456 from the emailed certificate.
+(function () {
+  var c = new URLSearchParams(location.search).get('c');
+  if (c) {
+    document.getElementById('cert').value = c.toUpperCase();
+    document.getElementById('go').click();
+  }
+})();
+</script>
+</body>
+</html>

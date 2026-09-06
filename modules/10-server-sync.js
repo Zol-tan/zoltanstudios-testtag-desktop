@@ -448,15 +448,17 @@ async function emailDocumentToClient(job, opts) {
   if (!base) throw new Error("No server configured.");
 
   const kind = (opts && opts.kind) || "certificate";
-  const html =
-    kind === "record" ? buildRecordHTML(job) :
-    kind === "generator" ? buildGeneratorReportHTML(job) :
-    buildCertificateHTML(job);
+
+  // Attach a real PDF. The certificate uses flexbox, which server-side PHP
+  // PDF libraries can't render, so it's produced here in the browser where
+  // the layout already works.
+  const pdf = await jobPdfBase64(job, kind);
 
   const payload = {
     to: (opts && opts.to) || job.clientEmail || "",
     kind: kind,
-    html: html,
+    pdfBase64: pdf.base64,
+    filename: pdf.filename,
     certNumber: job.certNumber || "",
     clientName: job.clientName || "",
     siteAddress: job.siteAddress || "",

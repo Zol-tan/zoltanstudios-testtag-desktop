@@ -315,7 +315,21 @@ function TesterSettingsModal({
     className: inp,
     value: f.meggerCalibrationDate,
     onChange: set('meggerCalibrationDate')
-  })))), /*#__PURE__*/React.createElement("div", {
+  }))), (function () {
+  return React.createElement('div', null, React.createElement('label', {
+    className: lbl
+  }, 'Your Signature'), React.createElement(SignaturePad, {
+    value: f.signature,
+    onChange: function (v) {
+      setF(Object.assign({}, f, {
+        signature: v
+      }));
+      setSaved(false);
+    }
+  }), React.createElement('p', {
+    className: 'text-xs text-slate-400 mt-1'
+  }, 'Drawn once and applied to every certificate you issue.'));
+})()), /*#__PURE__*/React.createElement("div", {
     className: "px-5 py-4 border-t border-slate-100 flex justify-end gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onClose,

@@ -129,9 +129,48 @@ switch (action()) {
             json_error(400, 'A valid client email address is required.');
         }
 
-        $html = (string)($in['html'] ?? '');
-        if ($html === '') json_error(400, 'No document was supplied to send.');
-        if (strlen($html) > MAX_ATTACH_BYTES) {
+        // The front end renders the document to PDF in the browser (the
+        // certificate uses flexbox, which server-side PHP PDF libraries
+        // can't lay out) and posts it here base64-encoded.
+        $pdfB64 = (string)($in['pdfBase64'] ?? '');
+        $html   = (string)($in['html'] ?? '');
+
+        if ($pdfB64 !== '') {
+            $attachment = base64_decode($pdfB64, true);
+            if ($attachment === false || $attachment === '') {
+                json_error(400, 'The attached document could not be decoded.');
+            }
+            if (strncmp($attachment, '%PDF', 4) !== 0) {
+                json_error(400, 'The attached document is not a valid PDF.');
+            }
+            $attachMime = 'application/pdf';
+        } elseif ($html !== '') {
+            $attachment = $html;
+            $attachMime = 'text/html';
+        } else {
+            json_error(400, 'No document was supplied to send.');
+        }
+
+        // Fingerprint the exact bytes the client receives, so the document
+        // can later be checked for tampering at /verify.html.
+        $sha256 = hash('sha256', $attachment);
+        if ($certNo !== '') {
+            try {
+                db()->prepare('DELETE FROM testtag_verify WHERE cert_number = ?')->execute([strtoupper($certNo)]);
+                db()->prepare(
+                    'INSERT INTO testtag_verify
+                     (id, cert_number, sha256, client_name, site_address, test_date, next_due, issued_at)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([
+                    new_id(), strtoupper($certNo), $sha256,
+                    $client, $site, trim((string)($in['testDate'] ?? '')), $nextDue, now(),
+                ]);
+            } catch (Throwable $e) {
+                // Verification is a bonus - never block sending the certificate.
+            }
+        }
+
+        if (strlen($attachment) > MAX_ATTACH_BYTES) {
             json_error(413, 'That document is too large to email. Try removing some photos.');
         }
 
@@ -153,10 +192,14 @@ switch (action()) {
             ?: ($label . ($certNo !== '' ? ' - ' . $certNo : '') . ' - ZoltanStudios');
 
         // Filename the client sees. Keep it descriptive; they may keep it for years.
-        $safe = preg_replace('/[^A-Za-z0-9._-]+/', '-', $client !== '' ? $client : 'client');
-        $filename = strtolower(trim((string)$kind, '-')) . '-'
-                  . ($certNo !== '' ? $certNo . '-' : '')
-                  . trim((string)$safe, '-') . '.html';
+        $filename = trim((string)($in['filename'] ?? ''));
+        if ($filename === '' || !preg_match('/^[A-Za-z0-9._-]+$/', $filename)) {
+            $safe = preg_replace('/[^A-Za-z0-9._-]+/', '-', $client !== '' ? $client : 'client');
+            $ext = $attachMime === 'application/pdf' ? '.pdf' : '.html';
+            $filename = strtolower(trim((string)$kind, '-')) . '-'
+                      . ($certNo !== '' ? $certNo . '-' : '')
+                      . trim((string)$safe, '-') . $ext;
+        }
 
         // Body. email_template() gives the same styling as the portal's other
         // mail, so this looks like it came from the same business.
@@ -174,21 +217,32 @@ switch (action()) {
             ? '<p>' . nl2br(htmlspecialchars($note, ENT_QUOTES)) . '</p>'
             : '';
 
-        $outro = '<p>Open the attached file in any web browser to view or print it. '
+        $siteUrl = rtrim(defined('SITE_URL') ? SITE_URL : 'https://zoltanstudios.au', '/');
+        $verifyUrl = $siteUrl . '/verify.html' . ($certNo !== '' ? '?c=' . rawurlencode($certNo) : '');
+        $portalUrl = $siteUrl . '/certificate.html';
+
+        $outro = '<p>The attached PDF can be opened, printed or filed as-is. '
                . 'Keep it with your safety records.</p>'
-               . '<p>Any questions, just reply to this email.</p>';
+               . '<p style="margin-top:14px"><strong>Confirm this certificate is genuine</strong><br />'
+               . 'Anyone can check it at <a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES) . '">'
+               . htmlspecialchars($verifyUrl, ENT_QUOTES) . '</a>. '
+               . 'Attach the PDF there and it will confirm the document has not been altered since we issued it.</p>'
+               . '<p style="margin-top:10px"><strong>Need another copy later?</strong><br />'
+               . 'Download it any time at <a href="' . htmlspecialchars($portalUrl, ENT_QUOTES) . '">'
+               . htmlspecialchars($portalUrl, ENT_QUOTES) . '</a> using your email address and the certificate number above.</p>'
+               . '<p style="margin-top:14px">Any questions, just reply to this email.</p>';
 
         $bodyHtml = function_exists('email_template')
             ? email_template($label, $intro . $facts . $custom . $outro, '', '')
             : ('<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b">'
                . $intro . $facts . $custom . $outro . '</div>');
 
-        $ok = send_mail_with_attachment($to, $subject, $bodyHtml, $filename, $html);
+        $ok = send_mail_with_attachment($to, $subject, $bodyHtml, $filename, $attachment, $attachMime);
         if (!$ok) {
             json_error(500, 'The server could not send that email. Check the mail settings in cPanel.');
         }
 
-        json_ok(['to' => $to, 'subject' => $subject, 'filename' => $filename]);
+        json_ok(['to' => $to, 'subject' => $subject, 'filename' => $filename, 'sha256' => $sha256]);
         break;
     }
 

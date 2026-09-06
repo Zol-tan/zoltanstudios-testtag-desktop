@@ -57,6 +57,7 @@ const required = [
   "buildBackup", "restoreBackup", "pushJobToServer", "pullJobsFromServer",
   "startCaptureSession", "isDesktopShell",
   "emailDocumentToClient", "EmailCertButton",
+  "SignaturePad", "testerSignatureBlockHtml", "renderHtmlToPdf", "downloadJobPdf", "jobPdfBase64", "PdfButtons",
 ];
 const absent = required.filter((sym) => !bundle.includes(sym));
 if (absent.length) fail("expected symbols missing from bundle: " + absent.join(", "));

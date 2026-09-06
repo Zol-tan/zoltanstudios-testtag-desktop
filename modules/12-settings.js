@@ -30,6 +30,9 @@ function effectiveTester() {
     testEquipmentCalibrationDate: s.testEquipmentCalibrationDate || "",
     meggerEquipment: s.meggerEquipment || "",
     meggerCalibrationDate: s.meggerCalibrationDate || "",
+    // Drawn once in Tester Defaults and applied to every certificate, so the
+    // tester line isn't left blank on an emailed PDF.
+    signature: s.signature || "",
   };
 }
 
@@ -425,11 +428,7 @@ function buildGeneratorReportHTML(job) {
     </div>
 
     <div class="signatures">
-      <div>
-        <div class="sig-line"></div>
-        <div class="sig-name">${escapeHtml(job.testerName)}</div>
-        <div class="sig-label">Inspected By &mdash; Signature &amp; Date</div>
-      </div>
+      ${testerSignatureBlockHtml(job, "Inspected By")}
       ${clientSignatureBlockHtml(job)}
     </div>
 
@@ -860,4 +859,107 @@ function duplicateTags(items) {
     seen[t] = true;
   });
   return dupes;
+}
+
+// A small draw-with-mouse-or-finger signature pad. Used in Tester Defaults
+// so the tester signs once rather than on every certificate.
+function SignaturePad({
+  value,
+  onChange
+}) {
+  var ref = React.useRef(null);
+  var d = React.useState(false);
+  var drawing = d[0],
+    setDrawing = d[1];
+  React.useEffect(function () {
+    var c = ref.current;
+    if (!c) return;
+    var r = c.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    c.width = r.width * dpr;
+    c.height = r.height * dpr;
+    var ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    // Redraw an existing signature so reopening settings doesn't look blank.
+    if (value) {
+      var img = new Image();
+      img.onload = function () {
+        ctx.drawImage(img, 0, 0, r.width, r.height);
+      };
+      img.src = value;
+    }
+  }, []);
+  function pos(e) {
+    var c = ref.current;
+    var r = c.getBoundingClientRect();
+    var p = e.touches ? e.touches[0] : e;
+    return {
+      x: p.clientX - r.left,
+      y: p.clientY - r.top
+    };
+  }
+  function start(e) {
+    e.preventDefault();
+    var ctx = ref.current.getContext('2d');
+    var p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    setDrawing(true);
+  }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    var ctx = ref.current.getContext('2d');
+    var p = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  function end() {
+    if (!drawing) return;
+    setDrawing(false);
+    // Flatten onto white so it prints and emails properly.
+    var c = ref.current;
+    var out = document.createElement('canvas');
+    out.width = c.width;
+    out.height = c.height;
+    var o = out.getContext('2d');
+    o.fillStyle = '#fff';
+    o.fillRect(0, 0, out.width, out.height);
+    o.drawImage(c, 0, 0);
+    onChange(out.toDataURL('image/png'));
+  }
+  function clear() {
+    var c = ref.current;
+    c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    onChange('');
+  }
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "border border-slate-300 rounded-lg bg-white overflow-hidden"
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: ref,
+    style: {
+      display: 'block',
+      width: '100%',
+      height: '110px',
+      touchAction: 'none',
+      cursor: 'crosshair'
+    },
+    onPointerDown: start,
+    onPointerMove: move,
+    onPointerUp: end,
+    onPointerLeave: end,
+    onPointerCancel: end
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mt-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-400"
+  }, value ? 'Signature saved' : 'Draw your signature above'), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: clear,
+    className: "text-xs text-slate-500 hover:text-slate-700 underline"
+  }, "Clear")));
 }

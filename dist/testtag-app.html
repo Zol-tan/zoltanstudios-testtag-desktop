@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Test &amp; Tag Records - ZoltanStudios v2.7</title>
+<!-- build: standalone-local-v2.3-generator-pwa -->
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<meta name="description" content="AS/NZS 3760:2022 test and tag compliance records, certificates and generator inspection reports.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Test &amp; Tag">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="stylesheet" href="testtag-app.css">
+<script src="testtag-react.min.js"></script>
+<script src="testtag-react-dom.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif; }
+  .animate-spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @media print { body { background: white !important; } }
+
+  /* Respect phone notches / home indicator when installed */
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Install prompt */
+  #zs-install {
+    position: fixed; right: 16px; bottom: 16px; z-index: 9999;
+    display: none; align-items: center; gap: 10px;
+    background: #1e293b; color: #fff; border: 1px solid #334155;
+    border-radius: 12px; padding: 10px 12px 10px 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    font-size: 14px;
+  }
+  #zs-install button {
+    border: 0; border-radius: 8px; padding: 7px 12px;
+    font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  #zs-install .go { background: #2563eb; color: #fff; }
+  #zs-install .no { background: transparent; color: #94a3b8; }
+  @media print { #zs-install { display: none !important; } }
+</style>
+</head>
+<body class="bg-slate-50">
+<div id="root"></div>
+
+<div id="zs-install">
+  <span>Install Test &amp; Tag as an app?</span>
+  <button class="go" id="zs-install-go">Install</button>
+  <button class="no" id="zs-install-no">Not now</button>
+</div>
+
+<script src="jspdf.umd.min.js"></script>
+<script src="html2canvas.min.js"></script>
+<script src="qrcode.js"></script>
+<script src="testtag-app.js"></script>
+
+<script>
+// ---- Service worker registration --------------------------------------
+// Only registers over http(s); opening the file directly (file://) skips it.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW registration failed:', e);
+    });
+  });
+}
+
+// ---- Install prompt ---------------------------------------------------
+(function () {
+  var bar = document.getElementById('zs-install');
+  var deferred = null;
+
+  // Don't nag if already installed, or if dismissed this session
+  function alreadyInstalled() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (!alreadyInstalled() && !sessionStorage.getItem('zs-install-dismissed')) {
+      bar.style.display = 'flex';
+    }
+  });
+
+  document.getElementById('zs-install-go').addEventListener('click', function () {
+    bar.style.display = 'none';
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.finally(function () { deferred = null; });
+  });
+
+  document.getElementById('zs-install-no').addEventListener('click', function () {
+    bar.style.display = 'none';
+    sessionStorage.setItem('zs-install-dismissed', '1');
+  });
+
+  window.addEventListener('appinstalled', function () {
+    bar.style.display = 'none';
+    deferred = null;
+  });
+})();
+</script>
+</body>
+</html>

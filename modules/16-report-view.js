@@ -34,6 +34,10 @@ function ReportView({
   return React.createElement(EmailCertButton, {
     job: job
   });
+})(), (function () {
+  return React.createElement(PdfButtons, {
+    job: job
+  });
 })(), /*#__PURE__*/React.createElement("button", {
     onClick: () => downloadSingleFile(buildRecordHTML(job), "record.html"),
     className: "inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm",
@@ -212,13 +216,23 @@ function ReportView({
     className: "font-semibold text-slate-800 mb-2"
   }, "Statutory Declaration"), /*#__PURE__*/React.createElement("p", null, "I declare that the electrical equipment listed in this report has been inspected and tested in accordance with AS/NZS 3760, and that the results recorded above are a true and accurate account of the condition of each item at the time of testing. This testing has been carried out with regard to the duties and obligations set out under the Occupational Health and Safety Act 2004 (Vic) and the Occupational Health and Safety Regulations 2017. Equipment marked \"Fail\" should be removed from service, repaired, or replaced before further use.")), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-8 text-sm"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "border-b border-slate-400 h-12"
-  }), /*#__PURE__*/React.createElement("p", {
-    className: "mt-1 font-medium"
-  }, job.testerName), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-slate-400"
-  }, "Tester Signature & Date")), (function () {
+  }, (function () {
+  var sig = '';
+  try {
+    sig = (effectiveTester() || {}).signature || '';
+  } catch (e) {}
+  return React.createElement('div', null, React.createElement('div', {
+    className: 'border-b border-slate-400 h-12 relative'
+  }, sig ? React.createElement('img', {
+    src: sig,
+    alt: 'Tester signature',
+    className: 'absolute bottom-0.5 left-0 max-h-11 max-w-[230px]'
+  }) : null), React.createElement('p', {
+    className: 'mt-1 font-medium'
+  }, job.testerName), React.createElement('p', {
+    className: 'text-xs text-slate-400'
+  }, sig ? 'Tester Signature \u2014 ' + formatDisplayDate(job.testDate) : 'Tester Signature & Date'));
+})(), (function () {
   var sig = latestSignature(job);
   var name = sig && sig.note ? sig.note : job.clientName || 'Client Representative';
   var when = sig && sig.createdAt ? formatDisplayDate(String(sig.createdAt).slice(0, 10)) : '';
@@ -359,4 +373,30 @@ function EmailCertButton({
     disabled: busy || !to.trim(),
     className: "bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold px-5 py-2 rounded-lg"
   }, busy ? "Sending\u2026" : "Send email")))));
+}
+
+function PdfButtons({
+  job
+}) {
+  var b = React.useState('');
+  var busy = b[0],
+    setBusy = b[1];
+  function make(kind) {
+    setBusy(kind);
+    downloadJobPdf(job, kind).catch(function (e) {
+      alert('Could not create the PDF: ' + e.message);
+    }).finally(function () {
+      setBusy('');
+    });
+  }
+  var cls = "inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm disabled:opacity-50";
+  var isGen = job.jobType === 'generator_inspection';
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    onClick: function () {
+      make(isGen ? 'generator' : 'certificate');
+    },
+    disabled: !!busy,
+    className: cls,
+    title: "Download as a PDF"
+  }, busy === 'certificate' || busy === 'generator' ? 'Creating PDF\u2026' : 'PDF'));
 }
