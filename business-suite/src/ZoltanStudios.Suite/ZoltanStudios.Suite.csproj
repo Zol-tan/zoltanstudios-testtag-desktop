@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- Lets the project be compile-checked on non-Windows CI/dev machines. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>ZoltanStudios.Suite</RootNamespace>
+    <AssemblyName>ZoltanStudios.Suite</AssemblyName>
+
+    <!-- Shown in Windows' file properties and the installer -->
+    <Product>ZoltanStudios Business Suite</Product>
+    <Company>ZoltanStudios</Company>
+    <Copyright>ZoltanStudios</Copyright>
+    <Version>0.2.0</Version>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Local database. Everything is read and written locally so the app
+         works with no connection; syncing to the cPanel API comes later. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
