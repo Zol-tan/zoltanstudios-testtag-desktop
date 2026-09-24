@@ -10,7 +10,7 @@
     <DockPanel>
 
         <!-- ============================= Menu bar ============================= -->
-        <Menu DockPanel.Dock="Top" Padding="4,3" Background="{StaticResource ChromeBrush}">
+        <Menu DockPanel.Dock="Top" Padding="6,4" FontSize="12.5" Background="{StaticResource ChromeBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Test &amp; Tag Job"  InputGestureText="Ctrl+N" Click="NewJob_Click" />
                 <MenuItem Header="New _Client"              Click="NewClient_Click" />
@@ -31,7 +31,8 @@
                           IsChecked="True" Click="ToggleSidebar_Click" />
                 <Separator />
                 <MenuItem Header="_Dashboard"     Tag="dashboard" Click="Navigate_Click" />
-                <MenuItem Header="_Test &amp; Tag" Tag="testtag"  Click="Navigate_Click" />
+                <MenuItem Header="Test &amp; Tag _App" Tag="webapp" Click="Navigate_Click" />
+                <MenuItem Header="_Test &amp; Tag Jobs" Tag="testtag"  Click="Navigate_Click" />
                 <MenuItem Header="_Clients"       Tag="clients"   Click="Navigate_Click" />
                 <MenuItem Header="_Invoices"      Tag="invoices"  Click="Navigate_Click" />
                 <MenuItem Header="C_alendar"      Tag="calendar"  Click="Navigate_Click" />
@@ -57,6 +58,7 @@
                 <Separator />
                 <MenuItem Header="_Quote Calculator" Tag="quote" Click="Navigate_Click" />
                 <MenuItem Header="_3D Printing Quote" Tag="printquote" Click="Navigate_Click" />
+                <MenuItem Header="_Filament Stock"    Tag="filament" Click="Navigate_Click" />
             </MenuItem>
 
             <MenuItem Header="_Parts">
@@ -76,7 +78,7 @@
         </Menu>
 
         <!-- ============================ Status bar ============================ -->
-        <StatusBar DockPanel.Dock="Bottom" Background="{StaticResource ChromeBrush}">
+        <StatusBar DockPanel.Dock="Bottom" Background="{StaticResource ChromeBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="8,2">
             <StatusBarItem>
                 <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource MutedText}" />
             </StatusBarItem>
@@ -86,64 +88,59 @@
                              Fill="{StaticResource OkBrush}" VerticalAlignment="Center" />
                     <TextBlock x:Name="SyncText" Text="Offline" Margin="0,0,12,0"
                                Foreground="{StaticResource MutedText}" />
-                    <TextBlock x:Name="VersionText" Text="v0.2.0"
+                    <TextBlock x:Name="VersionText" Text="v0.3.0"
                                Foreground="{StaticResource FaintText}" />
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>
 
-        <!-- ========================= Navigation pane ========================== -->
-        <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="210"
-                Background="{StaticResource SidebarBrush}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+        <!-- ========================= Navigation pane ==========================
+             Items are built in MainWindow.xaml.cs (BuildNav) from one list, so
+             the sidebar, the menus and Navigate() can't disagree. -->
+        <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="236"
+                Background="{StaticResource SidebarBrush}">
             <DockPanel>
-                <Border DockPanel.Dock="Top" Padding="14,14,14,10">
-                    <StackPanel>
-                        <TextBlock Text="ZoltanStudios" FontSize="15" FontWeight="Bold"
-                                   Foreground="{StaticResource HeadingText}" />
-                        <TextBlock Text="Business Suite" FontSize="11"
-                                   Foreground="{StaticResource FaintText}" />
+                <Border DockPanel.Dock="Top" Padding="18,18,18,14">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="38" Height="38" CornerRadius="10" Margin="0,0,11,0">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#3B82F6" Offset="0" />
+                                    <GradientStop Color="#7C3AED" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <TextBlock Text="&#xE945;" FontFamily="{StaticResource IconFont}" FontSize="18"
+                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="ZoltanStudios" FontSize="15" FontWeight="Bold" Foreground="White" />
+                            <TextBlock Text="Business Suite" FontSize="11" Foreground="{StaticResource SidebarMuted}" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <TreeView x:Name="NavTree" BorderThickness="0" Background="Transparent"
-                          Padding="6,4" SelectedItemChanged="NavTree_SelectedItemChanged">
-                    <TreeViewItem Header="Dashboard" Tag="dashboard" />
-                    <TreeViewItem Header="Test &amp; Tag" Tag="testtag" IsExpanded="True">
-                        <TreeViewItem Header="All Jobs"        Tag="testtag.jobs" />
-                        <TreeViewItem Header="Retest Due"      Tag="testtag.due" />
-                        <TreeViewItem Header="Generator Reports" Tag="testtag.generator" />
-                        <TreeViewItem Header="Asset Register"  Tag="testtag.assets" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Clients"  Tag="clients" />
-                    <TreeViewItem Header="Projects" Tag="projects" />
-                    <TreeViewItem Header="Messages" Tag="messages" />
-                    <TreeViewItem Header="Quotes"   Tag="quotes" />
-                    <TreeViewItem Header="Invoices" Tag="invoices" IsExpanded="False">
-                        <TreeViewItem Header="Unpaid"  Tag="invoices.unpaid" />
-                        <TreeViewItem Header="All"     Tag="invoices.all" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Calendar" Tag="calendar" IsExpanded="True">
-                        <TreeViewItem Header="Booking Requests" Tag="calendar.pending" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Tools" Tag="tools" IsExpanded="True">
-                        <TreeViewItem Header="Quote Calculator" Tag="quote" />
-                        <TreeViewItem Header="3D Printing Quote" Tag="printquote" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Parts" Tag="parts" IsExpanded="True">
-                        <TreeViewItem Header="Stock"        Tag="parts.stock" />
-                        <TreeViewItem Header="Restock List" Tag="parts.restock" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="API Tokens" Tag="tokens" />
-                    <TreeViewItem Header="Settings" Tag="settings" />
-                </TreeView>
+                <Border DockPanel.Dock="Bottom" Padding="18,12" BorderBrush="{StaticResource SidebarHover}" BorderThickness="0,1,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="SideDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 Fill="{StaticResource SidebarMuted}" />
+                        <TextBlock x:Name="SideStatus" Text="Offline" FontSize="11.5"
+                                   Foreground="{StaticResource SidebarText}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="NavHost" Margin="0,2,0,12" />
+                </ScrollViewer>
             </DockPanel>
         </Border>
 
         <!-- ========================== Content area ============================ -->
-        <Border Padding="0">
+        <Grid>
             <ContentControl x:Name="ContentHost" />
-        </Border>
+            <!-- The built-in test and tag app lives here and is only hidden,
+                 never torn down, so switching pages doesn't reload it. -->
+            <ContentControl x:Name="WebHost" Visibility="Collapsed" />
+        </Grid>
 
     </DockPanel>
 </Window>

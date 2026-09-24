@@ -9,5 +9,6 @@
     <Compile Include="../../../src/ZoltanStudios.Suite/Services/*.cs" />
     <Compile Include="../../../src/ZoltanStudios.Suite/Models/*.cs" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <EmbeddedResource Include="../../../src/ZoltanStudios.Suite/Resources/appliances.json" LogicalName="ZoltanStudios.Suite.appliances.json" />
   </ItemGroup>
 </Project>

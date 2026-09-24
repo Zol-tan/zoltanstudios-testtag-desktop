@@ -234,6 +234,29 @@ public static class Database
             LastError   TEXT NOT NULL DEFAULT ''
         );
 
+        -- 3D printer filament (local to the suite; the website has no filament stock).
+        CREATE TABLE IF NOT EXISTS Filament (
+            Id              TEXT PRIMARY KEY,
+            Material        TEXT NOT NULL DEFAULT 'PLA',
+            Colour          TEXT NOT NULL DEFAULT '',
+            Brand           TEXT NOT NULL DEFAULT '',
+            SpoolGrams      REAL NOT NULL DEFAULT 1000,
+            RemainingGrams  REAL NOT NULL DEFAULT 1000,
+            CostPerKg       REAL NOT NULL DEFAULT 0,
+            LowAtGrams      REAL NOT NULL DEFAULT 200,
+            Notes           TEXT NOT NULL DEFAULT '',
+            UpdatedAt       TEXT NOT NULL,
+            Deleted         INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS FilamentLog (
+            Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            SpoolId     TEXT NOT NULL,
+            Grams       REAL NOT NULL,
+            Note        TEXT NOT NULL DEFAULT '',
+            At          TEXT NOT NULL
+        );
+
         INSERT OR IGNORE INTO Meta (Key, Value) VALUES ('SchemaVersion', '1');
         """;
 }

@@ -378,6 +378,66 @@ Check(!afterOut.Ok && afterOut.Status == 401 && !api.IsSignedIn, "signed out: ca
 var syncOut = await sync.SyncAsync();
 Check(!syncOut.Ok && syncOut.Message.Contains("Not signed in"), "sync while signed out says so", syncOut.Message);
 
+// ============================================================ local features
+Console.WriteLine("== find");
+var hits = SearchService.Search("kettle");
+Check(hits.Any(h => h.Kind == "Item" && h.Title.Contains("Kettle") && h.JobId == job.Id), "finds a tested item by description, pointing at its job");
+Check(SearchService.Search(Repository.GetJob(job.Id)!.CertNumber).Any(h => h.Kind == "Job"), "finds a job by certificate number");
+Check(SearchService.Search("T-002").Any(h => h.Kind == "Item"), "finds an item by tag number");
+Check(SearchService.Search("Sample Client").Any(h => h.Kind == "Client"), "finds a client by name");
+Check(SearchService.Search("x").Count == 0, "single letters don't search");
+
+Console.WriteLine("== appliance library");
+var lib = ApplianceLibrary.Load();
+Check(lib.Count == 212, "default library has the web app's 212 appliances", lib.Count.ToString());
+Check(lib.Any(a => a.Name == "Laptop Charger / Power Brick" && a.EquipmentClass == "II" && a.ItemType == "standard"), "class and type carried over");
+Check(lib.Count(a => a.ItemType == "power_tool") == 52 && lib.Count(a => a.ItemType == "microwave") == 3 && lib.Count(a => a.ItemType == "rcd") == 3, "pricing types per category (52 power tools, 3 microwave, 3 RCD)");
+lib.Add(new Appliance { Category = " Custom ", Name = "  Tattoo machine ", ItemType = "weird", EquipmentClass = "IV" });
+lib.Add(new Appliance { Name = "   " });
+ApplianceLibrary.Save(lib);
+var lib2 = ApplianceLibrary.Load();
+var tat = lib2.FirstOrDefault(a => a.Name == "Tattoo machine");
+Check(lib2.Count == 213 && tat is { Category: "Custom", ItemType: "standard", EquipmentClass: "I" }, "save trims, drops blanks and fixes invalid type/class");
+ApplianceLibrary.ResetToDefaults();
+Check(ApplianceLibrary.Load().Count == 212, "reset to defaults");
+
+Console.WriteLine("== filament");
+var spool = new Spool { Material = "PETG", Colour = "Black", SpoolGrams = 1000, RemainingGrams = 350, CostPerKg = 32, LowAtGrams = 200 };
+FilamentStock.Save(spool);
+Check(FilamentStock.Use(spool.Id, 120, "Bracket for Q-0001") == 120, "use takes the grams");
+var sp = FilamentStock.All().First(s => s.Id == spool.Id);
+Check(sp.RemainingGrams == 230 && !sp.IsLow && sp.State == "in stock", "230 g left, not yet low");
+FilamentStock.Use(spool.Id, 100, "Test print");
+Check(FilamentStock.Low().Any(s => s.Id == spool.Id), "below the warning level shows as low");
+Check(FilamentStock.Use(spool.Id, 999, "Too much") == 130 && FilamentStock.All().First(s => s.Id == spool.Id).State == "out", "can't go below zero; shows out");
+FilamentStock.Use(spool.Id, -50, "Correction");
+Check(FilamentStock.All().First(s => s.Id == spool.Id).RemainingGrams == 50, "negative use puts filament back");
+Check(FilamentStock.Log().Count == 4 && FilamentStock.Log()[0].Note == "Correction", "every use is logged, newest first");
+
+Console.WriteLine("== backup");
+var bak = Path.Combine(Path.GetTempPath(), "suite-harness-backup.zsbackup");
+File.Delete(bak);
+var jobsBefore = Repository.GetJobs().Count;
+var clientsBefore = Repository.GetClients().Count;
+var info = BackupService.Export(bak);
+Check(File.Exists(bak) && !File.Exists(bak + "-wal") && info.StartsWith($"{jobsBefore} job(s)"), "backup written as one file and described", info);
+// change things, then restore
+Repository.DeleteJob(Repository.GetJobs().First().Id);
+FilamentStock.Delete(spool.Id);
+Repository.SetSetting("TesterName", "Changed After Backup");
+var safety = BackupService.Import(bak);
+Check(Repository.GetJobs().Count == jobsBefore && Repository.GetClients().Count == clientsBefore, "restore brings back the jobs and clients");
+Check(FilamentStock.All().Any(s => s.Id == spool.Id), "restore brings back filament");
+Check(Repository.GetSetting("TesterName", "") != "Changed After Backup", "restore brings back settings");
+Check(File.Exists(safety) && BackupService.Inspect(safety).Ok && BackupService.Inspect(safety).Message.StartsWith($"{jobsBefore - 1} job(s)"),
+    "the data it replaced was saved first", BackupService.Inspect(safety).Message);
+var notBackup = Path.Combine(Path.GetTempPath(), "not-a-backup.zsbackup");
+File.WriteAllText(notBackup, "hello");
+Check(!BackupService.Inspect(notBackup).Ok, "a random file is refused");
+var threw = false;
+try { BackupService.Import(notBackup); } catch (InvalidOperationException) { threw = true; }
+Check(threw && Repository.GetJobs().Count == jobsBefore, "importing a bad file changes nothing");
+
 Console.WriteLine();
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;

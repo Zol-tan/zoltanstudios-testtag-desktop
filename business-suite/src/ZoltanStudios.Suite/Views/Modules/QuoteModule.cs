@@ -54,10 +54,12 @@ public sealed class QuoteModule : ModuleBase
         _inputs.HorizontalAlignment = HorizontalAlignment.Left;
         Body.Children.Add(_inputs);
 
-        _results.MaxWidth = 620;
+        _results.Width = 620;
         _results.HorizontalAlignment = HorizontalAlignment.Left;
-        _results.Margin = new Thickness(0, 16, 0, 0);
-        Body.Children.Add(_results);
+        _results.Margin = new Thickness(0);
+        var resultsCard = Ui.Card(_results, 22, new Thickness(0, 8, 0, 16));
+        resultsCard.HorizontalAlignment = HorizontalAlignment.Left;
+        Body.Children.Add(resultsCard);
 
         BuildInputs();
     }

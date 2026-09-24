@@ -31,18 +31,32 @@ internal static class Forms
         return c;
     }
 
-    public static Button Btn(string text, RoutedEventHandler click, bool primary = false, bool danger = false)
+    public static Button Btn(string text, RoutedEventHandler click, bool primary = false, bool danger = false, string? glyph = null)
     {
         var b = new Button
         {
-            Content = text,
-            Padding = new Thickness(13, 6, 13, 6),
             Margin = new Thickness(0, 0, 8, 0),
             MinWidth = 80,
         };
+        if (glyph is null) b.Content = text;
+        else
+        {
+            var s = new StackPanel { Orientation = Orientation.Horizontal };
+            s.Children.Add(new TextBlock
+            {
+                Text = glyph,
+                FontFamily = (FontFamily)Application.Current.Resources["IconFont"],
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 7, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            s.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+            b.Content = s;
+        }
         if (primary || danger)
         {
             b.Background = Res(danger ? "BadBrush" : "AccentBrush");
+            b.BorderBrush = b.Background;
             b.Foreground = Brushes.White;
             b.FontWeight = FontWeights.SemiBold;
         }

@@ -19,9 +19,9 @@ public sealed class ClientEditorWindow : Window
 
         Title = existing is null ? "New Client" : _client.Display;
         Width = 520;
-        Height = 480;
+        Height = 600;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        ResizeMode = ResizeMode.NoResize;
+        ResizeMode = ResizeMode.CanResize;
         Background = (Brush)Application.Current.Resources["AppBackground"];
 
         _notes.AcceptsReturn = true;

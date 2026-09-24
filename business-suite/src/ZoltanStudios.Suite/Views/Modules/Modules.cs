@@ -6,132 +6,145 @@ using ZoltanStudios.Suite.Services;
 
 namespace ZoltanStudios.Suite.Views.Modules;
 
-// ===================================================================== helpers
-
-internal static class Ui
-{
-    public static Brush Res(string key) => (Brush)Application.Current.Resources[key];
-
-    /// <summary>A DataGrid styled consistently for every list in the app.</summary>
-    public static DataGrid Grid()
-    {
-        return new DataGrid
-        {
-            AutoGenerateColumns = false,
-            IsReadOnly = true,
-            CanUserAddRows = false,
-            HeadersVisibility = DataGridHeadersVisibility.Column,
-            GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-            HorizontalGridLinesBrush = Res("BorderBrush"),
-            BorderBrush = Res("BorderBrush"),
-            BorderThickness = new Thickness(1),
-            Background = Brushes.White,
-            RowBackground = Brushes.White,
-            AlternatingRowBackground = new SolidColorBrush(Color.FromRgb(250, 251, 252)),
-            FontSize = 12,
-            RowHeight = 30,
-            MinHeight = 240,
-        };
-    }
-
-    public static DataGridTextColumn Col(string header, string path, double width = 0)
-    {
-        var c = new DataGridTextColumn
-        {
-            Header = header,
-            Binding = new System.Windows.Data.Binding(path),
-        };
-        c.Width = width > 0
-            ? new DataGridLength(width)
-            : new DataGridLength(1, DataGridLengthUnitType.Star);
-        return c;
-    }
-
-    /// <summary>Small stat tile used across the dashboard.</summary>
-    public static Border Tile(string number, string label, string brushKey = "HeadingText")
-    {
-        var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
-        {
-            Text = number, FontSize = 26, FontWeight = FontWeights.Bold,
-            Foreground = Res(brushKey),
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = label, FontSize = 11, Foreground = Res("MutedText"),
-        });
-        return new Border
-        {
-            Background = Brushes.White,
-            BorderBrush = Res("BorderBrush"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(16, 12, 16, 12),
-            Margin = new Thickness(0, 0, 10, 0),
-            MinWidth = 116,
-            Child = stack,
-        };
-    }
-
-    public static TextBlock Empty(string message) => new()
-    {
-        Text = message,
-        Foreground = Res("MutedText"),
-        FontSize = 13,
-        Margin = new Thickness(0, 10, 0, 0),
-        TextWrapping = TextWrapping.Wrap,
-    };
-}
-
 // =================================================================== dashboard
 
 public sealed class DashboardModule : ModuleBase
 {
-    public DashboardModule() : base(
-        "Dashboard",
-        "Retests due, outstanding invoices and recent activity.")
+    private sealed class Upcoming
+    {
+        public string When { get; init; } = "";
+        public string What { get; init; } = "";
+        public string Kind { get; init; } = "";
+        public Job? Job { get; init; }
+        public Appointment? Booking { get; init; }
+    }
+
+    public DashboardModule() : base("Dashboard", Greeting())
     {
         var jobs = Repository.GetJobs();
         var invoices = Repository.GetInvoices();
+        var bookings = Repository.GetAppointments();
+        var clients = Repository.GetClients().ToDictionary(c => c.Id, c => c.Display);
+        string ClientName(string? id) => id is not null && clients.TryGetValue(id, out var n) ? n : "";
 
         var overdue = jobs.Count(j => j.DaysUntilRetest < 0);
         var dueSoon = jobs.Count(j => j.DaysUntilRetest is >= 0 and <= 60);
-        var unpaid = invoices.Count(i => i.IsUnpaid);
+        var unpaid = invoices.Where(i => i.IsUnpaid && Invoice.Normalise(i.Status) != "draft").ToList();
+        var requests = bookings.Count(b => b.Status == "pending");
         var pending = Repository.PendingSyncCount();
+        var problems = Repository.SyncProblems().Count;
+        var lowParts = PartsCatalogue.LowStock().Count;
+        var lowFilament = FilamentStock.Low().Count;
+        var thisMonth = jobs.Count(j => j.TestDate.StartsWith(DateTime.Today.ToString("yyyy-MM")));
 
-        var tiles = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 20) };
-        tiles.Children.Add(Ui.Tile(jobs.Count.ToString(), "Jobs"));
-        tiles.Children.Add(Ui.Tile(overdue.ToString(), "Retests overdue", overdue > 0 ? "BadBrush" : "HeadingText"));
-        tiles.Children.Add(Ui.Tile(dueSoon.ToString(), "Due in 60 days", dueSoon > 0 ? "WarnBrush" : "HeadingText"));
-        tiles.Children.Add(Ui.Tile(unpaid.ToString(), "Unpaid invoices", unpaid > 0 ? "WarnBrush" : "HeadingText"));
-        tiles.Children.Add(Ui.Tile(pending.ToString(), "Waiting to sync", pending > 0 ? "AccentBrush" : "HeadingText"));
+        MainWindow? Shell() => Window.GetWindow(this) as MainWindow;
+
+        // ---- quick actions
+        Body.Children.Add(Ui.Toolbar(
+            Forms.Btn("New Job", (_, _) => Shell()?.NewJob(), primary: true, glyph: Ui.GAdd),
+            Forms.Btn("Test & Tag App", (_, _) => Shell()?.Navigate("webapp"), glyph: Ui.GGlobe),
+            Forms.Btn("New Invoice", (_, _) => Shell()?.NewInvoice(), glyph: Ui.GMoney),
+            Forms.Btn("New Booking", (_, _) => Shell()?.NewBooking(), glyph: Ui.GCalendar),
+            Forms.Btn("Sync Now", (_, _) => Shell()?.SyncNow(), glyph: Ui.GSync),
+            Forms.Btn("Find", (_, _) => Shell()?.Navigate("find"), glyph: Ui.GSearch)));
+
+        // ---- tiles
+        var tiles = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        tiles.Children.Add(Clickable(Ui.Tile(thisMonth.ToString(), "Jobs this month", "AccentBrush", Ui.GBolt), "testtag"));
+        tiles.Children.Add(Clickable(Ui.Tile(overdue.ToString(), "Retests overdue", overdue > 0 ? "BadBrush" : "OkBrush", Ui.GWarn), "testtag.due"));
+        tiles.Children.Add(Clickable(Ui.Tile(dueSoon.ToString(), "Retests in 60 days", dueSoon > 0 ? "WarnBrush" : "OkBrush", Ui.GClock), "testtag.due"));
+        tiles.Children.Add(Clickable(Ui.Tile($"${unpaid.Sum(i => i.Total):0}", $"Unpaid · {unpaid.Count} invoice(s)", unpaid.Count > 0 ? "WarnBrush" : "OkBrush", Ui.GMoney), "invoices.unpaid"));
+        tiles.Children.Add(Clickable(Ui.Tile(requests.ToString(), "Booking requests", requests > 0 ? "VioletBrush" : "OkBrush", Ui.GCalendar), "calendar.pending"));
+        tiles.Children.Add(Clickable(Ui.Tile((lowParts + lowFilament).ToString(), "Stock running low", lowParts + lowFilament > 0 ? "WarnBrush" : "OkBrush", Ui.GRepair), lowParts > 0 ? "parts.restock" : "filament"));
+        tiles.Children.Add(Clickable(Ui.Tile(pending.ToString(), problems > 0 ? $"Waiting to sync · {problems} problem(s)" : "Waiting to sync",
+            problems > 0 ? "BadBrush" : pending > 0 ? "AccentBrush" : "OkBrush", Ui.GSync), "settings"));
         Body.Children.Add(tiles);
 
-        var due = jobs.Where(j => j.DaysUntilRetest <= 60)
-                      .OrderBy(j => j.DaysUntilRetest).Take(10).ToList();
+        // ---- two columns: coming up / money
+        var cols = new Grid();
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
 
-        Body.Children.Add(new TextBlock
-        {
-            Text = "Coming up", FontSize = 14, FontWeight = FontWeights.SemiBold,
-            Foreground = Ui.Res("HeadingText"), Margin = new Thickness(0, 0, 0, 8),
-        });
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        var horizon = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd");
+        var upcoming = jobs.Where(j => j.DaysUntilRetest <= 30)
+            .Select(j => new Upcoming
+            {
+                When = j.NextDue,
+                Kind = j.DaysUntilRetest < 0 ? "overdue" : "retest",
+                What = (ClientName(j.ClientId) is { Length: > 0 } cn ? cn + " · " : "") + (j.SiteAddress.Length > 0 ? j.SiteAddress : j.CertNumber),
+                Job = j,
+            })
+            .Concat(bookings.Where(b => b.Status != "cancelled" && string.CompareOrdinal(b.Date, today) >= 0 && string.CompareOrdinal(b.Date, horizon) <= 0)
+                .Select(b => new Upcoming
+                {
+                    When = b.Date + (b.Time.Length > 0 ? " " + b.Time : ""),
+                    Kind = b.Status == "pending" ? "pending" : "booking",
+                    What = b.Title + (ClientName(b.ClientId) is { Length: > 0 } cn ? " · " + cn : ""),
+                    Booking = b,
+                }))
+            .OrderBy(u => u.When).Take(12).ToList();
 
-        if (due.Count == 0)
-        {
-            Body.Children.Add(Ui.Empty(jobs.Count == 0
-                ? "No jobs yet. Sync with the server, or create one under Test & Tag."
-                : "Nothing due in the next 60 days."));
-        }
+        FrameworkElement left;
+        if (upcoming.Count == 0)
+            left = Ui.Card(Ui.Heading("Nothing due in the next 30 days", Ui.GCheck, 14), 18);
         else
         {
             var g = Ui.Grid();
-            g.Columns.Add(Ui.Col("Certificate", nameof(Job.CertNumber), 110));
-            g.Columns.Add(Ui.Col("Site", nameof(Job.SiteAddress)));
-            g.Columns.Add(Ui.Col("Tested", nameof(Job.TestDate), 100));
-            g.Columns.Add(Ui.Col("Due", nameof(Job.NextDue), 100));
-            g.ItemsSource = due;
-            Body.Children.Add(g);
+            g.Columns.Add(Ui.Col("Date", nameof(Upcoming.When), 120));
+            g.Columns.Add(Ui.StatusCol("", nameof(Upcoming.Kind), 90));
+            g.Columns.Add(Ui.Col("What", nameof(Upcoming.What)));
+            g.ItemsSource = upcoming;
+            g.MouseDoubleClick += (_, _) =>
+            {
+                if (g.SelectedItem is Upcoming { Job: { } j } && Repository.GetJob(j.Id) is { } full)
+                { if (new JobEditorWindow(full) { Owner = Window.GetWindow(this) }.ShowDialog() == true) Shell()?.ReloadCurrent(); }
+                else if (g.SelectedItem is Upcoming { Booking: { } b })
+                { if (new AppointmentEditorWindow(b) { Owner = Window.GetWindow(this) }.ShowDialog() == true) Shell()?.ReloadCurrent(); }
+            };
+            left = Ui.GridCard(g, "Coming up — next 30 days", Ui.GCalendar);
         }
+        cols.Children.Add(left);
+
+        FrameworkElement right;
+        var owing = unpaid.OrderBy(i => i.DueDate).Take(8)
+            .Select(i => new { i.Number, Client = ClientName(i.ClientId), Total = $"${i.Total:0.00}", Status = Invoice.Normalise(i.Status), Inv = i })
+            .ToList();
+        if (owing.Count == 0)
+            right = Ui.Card(Ui.Heading("No unpaid invoices", Ui.GCheck, 14), 18);
+        else
+        {
+            var g = Ui.Grid();
+            g.Columns.Add(Ui.Col("Invoice", "Number", 90));
+            g.Columns.Add(Ui.Col("Client", "Client"));
+            g.Columns.Add(Ui.Col("Total", "Total", 80));
+            g.Columns.Add(Ui.StatusCol("", "Status", 80));
+            g.ItemsSource = owing;
+            right = Ui.GridCard(g, "Waiting to be paid", Ui.GMoney);
+        }
+        Grid.SetColumn(right, 2);
+        cols.Children.Add(right);
+        Body.Children.Add(cols);
+
+        if (jobs.Count == 0)
+            Body.Children.Add(Ui.Empty("No jobs on this PC yet. Sign in under Sync ▸ Sync Settings and press F5 to pull everything from the website."));
+
+        FrameworkElement Clickable(FrameworkElement tile, string key)
+        {
+            tile.Cursor = System.Windows.Input.Cursors.Hand;
+            tile.ToolTip = "Open";
+            tile.MouseLeftButtonUp += (_, _) => Shell()?.Navigate(key);
+            return tile;
+        }
+    }
+
+    private static string Greeting()
+    {
+        var h = DateTime.Now.Hour;
+        var part = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+        var name = Repository.GetSetting("TesterName", "").Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return $"{part}{(name is null ? "" : ", " + name)} — {DateTime.Today:dddd d MMMM yyyy}.";
     }
 }
 
@@ -139,18 +152,32 @@ public sealed class DashboardModule : ModuleBase
 
 public sealed class TestTagModule : ModuleBase
 {
+    private sealed class JobRow
+    {
+        public Job Job { get; init; } = null!;
+        public string Client { get; init; } = "";
+        public string Cert => Job.CertNumber;
+        public string Site => Job.SiteAddress;
+        public string Tested => Job.TestDate;
+        public string Due => Job.NextDue;
+        public int Items => Job.ItemCount;
+        public int Failed => Job.FailCount;
+        public string State => Job.DaysUntilRetest < 0 ? "overdue" : Job.DaysUntilRetest <= 60 ? "due soon" : Job.FailCount > 0 ? "fail" : "pass";
+    }
+
     public TestTagModule(string view = "") : base(
         Heading(view),
-        "AS/NZS 3760:2022 compliance records, certificates and generator inspections.")
+        view switch
+        {
+            "due" => "Jobs due for retest in the next 60 days, and any overdue. Email the client a reminder straight from here.",
+            "generator" => "Generator inspection reports (AS/NZS 3010 observations).",
+            "assets" => "Every tested item across every job — the equipment register AS/NZS 3760 expects you to keep.",
+            _ => "AS/NZS 3760:2022 jobs stored in the suite. For photos, signatures and emailing, use the Test & Tag App.",
+        })
     {
         var jobs = Repository.GetJobs(includeItems: true);
-
-        var filtered = view switch
-        {
-            "due"       => jobs.Where(j => j.DaysUntilRetest <= 60).OrderBy(j => j.DaysUntilRetest).ToList(),
-            "generator" => jobs.Where(j => j.IsGenerator).ToList(),
-            _           => jobs,
-        };
+        var clients = Repository.GetClients();
+        var names = clients.ToDictionary(c => c.Id, c => c.Display);
 
         if (view == "assets")
         {
@@ -158,50 +185,73 @@ public sealed class TestTagModule : ModuleBase
             return;
         }
 
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
-        var newBtn = new Button
+        var filtered = view switch
         {
-            Content = "New Job",
-            Padding = new Thickness(14, 6, 14, 6),
-            Background = Ui.Res("AccentBrush"),
-            Foreground = Brushes.White,
-            FontWeight = FontWeights.SemiBold,
+            "due"       => jobs.Where(j => j.DaysUntilRetest <= 60).OrderBy(j => j.DaysUntilRetest).ToList(),
+            "generator" => jobs.Where(j => j.IsGenerator).ToList(),
+            _           => jobs,
         };
-        newBtn.Click += (_, _) => OpenJob(null);
-        bar.Children.Add(newBtn);
+        var rows = filtered.Select(j => new JobRow { Job = j, Client = j.ClientId is not null && names.TryGetValue(j.ClientId, out var n) ? n : "" }).ToList();
+
+        var g = Ui.Grid();
+        var bar = Ui.Toolbar(
+            Forms.Btn("New Job", (_, _) => OpenJob(null), primary: true, glyph: Ui.GAdd),
+            Forms.Btn("Open", (_, _) => { if (g.SelectedItem is JobRow r) OpenJob(r.Job); }, glyph: Ui.GEdit),
+            Forms.Btn("Test & Tag App", (_, _) => (Window.GetWindow(this) as MainWindow)?.Navigate("webapp"), glyph: Ui.GGlobe));
+        if (view == "due")
+            bar.Children.Add(Forms.Btn("Email Reminder…", (_, _) => { if (g.SelectedItem is JobRow r) EmailReminder(r.Job, clients); }, glyph: Ui.GMail));
         Body.Children.Add(bar);
 
-        if (filtered.Count == 0)
+        if (rows.Count == 0)
         {
             Body.Children.Add(Ui.Empty(jobs.Count == 0
-                ? "No jobs stored locally yet. Use Sync ▸ Sync Now to pull them from the server."
-                : "No jobs match this view."));
+                ? "No jobs stored locally yet. Use Sync ▸ Sync Now (F5) to pull them from the server."
+                : view == "due" ? "Nothing due in the next 60 days and nothing overdue." : "No jobs match this view."));
             return;
         }
 
-        var g = Ui.Grid();
-        g.Columns.Add(Ui.Col("Certificate", nameof(Job.CertNumber), 110));
-        g.Columns.Add(Ui.Col("Site", nameof(Job.SiteAddress)));
-        g.Columns.Add(Ui.Col("Tested", nameof(Job.TestDate), 100));
-        g.Columns.Add(Ui.Col("Next due", nameof(Job.NextDue), 100));
-        g.Columns.Add(Ui.Col("Items", nameof(Job.ItemCount), 60));
-        g.Columns.Add(Ui.Col("Failed", nameof(Job.FailCount), 60));
-        g.ItemsSource = filtered;
+        g.Columns.Add(Ui.StatusCol("", nameof(JobRow.State), 90));
+        g.Columns.Add(Ui.Col("Certificate", nameof(JobRow.Cert), 105));
+        g.Columns.Add(Ui.Col("Client", nameof(JobRow.Client), 180));
+        g.Columns.Add(Ui.Col("Site", nameof(JobRow.Site)));
+        g.Columns.Add(Ui.Col("Tested", nameof(JobRow.Tested), 95));
+        g.Columns.Add(Ui.Col("Next due", nameof(JobRow.Due), 95));
+        g.Columns.Add(Ui.Col("Items", nameof(JobRow.Items), 60));
+        g.Columns.Add(Ui.Col("Failed", nameof(JobRow.Failed), 60));
+        g.ItemsSource = rows;
+        g.MouseDoubleClick += (_, _) => { if (g.SelectedItem is JobRow r) OpenJob(r.Job); };
 
-        // Double-click is what people expect from a list in a desktop app.
-        g.MouseDoubleClick += (_, _) =>
-        {
-            if (g.SelectedItem is Job j) OpenJob(j);
-        };
+        Body.Children.Add(Ui.GridCard(g, $"{rows.Count} job(s)", Ui.GBolt,
+            new TextBlock { Text = "Double-click a job to open it", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
+    }
 
-        Body.Children.Add(new TextBlock
+    /// <summary>Opens the default mail program with a retest reminder filled in.</summary>
+    private void EmailReminder(Job job, List<Client> clients)
+    {
+        var client = clients.FirstOrDefault(c => c.Id == job.ClientId);
+        if (client is null || client.Email.Length == 0)
         {
-            Text = "Double-click a job to open it.",
-            FontSize = 11,
-            Foreground = Ui.Res("FaintText"),
-            Margin = new Thickness(0, 6, 0, 0),
-        });
-        Body.Children.Add(g);
+            MessageBox.Show(Window.GetWindow(this), "This job has no client with an email address. Set the client on the job first.",
+                "Email reminder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var first = client.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "there";
+        var due = DateTime.TryParse(job.NextDue, out var d) ? d.ToString("d MMMM yyyy") : job.NextDue;
+        var subject = $"Test and tag due {(job.DaysUntilRetest < 0 ? "(overdue)" : "soon")} — {job.SiteAddress}";
+        var body =
+            $"Hi {first},\n\n" +
+            $"The electrical test and tag at {(job.SiteAddress.Length > 0 ? job.SiteAddress : "your site")} " +
+            $"(certificate {job.CertNumber}, {job.ItemCount} items) is due for retest on {due}.\n\n" +
+            "Reply to this email or call me to book a time that suits.\n\n" +
+            $"Thanks,\n{Repository.GetSetting("TesterName", "ZoltanStudios")}\nZoltanStudios · zoltanstudios.au";
+        var url = $"mailto:{Uri.EscapeDataString(client.Email)}?subject={Uri.EscapeDataString(subject)}&body={Uri.EscapeDataString(body)}";
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch
+        {
+            Clipboard.SetText(body);
+            MessageBox.Show(Window.GetWindow(this), $"No mail program is set up on this PC. The reminder text was copied — paste it into an email to {client.Email}.",
+                "Email reminder", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
     }
 
     private void BuildAssetRegister(List<Job> jobs)
@@ -225,15 +275,16 @@ public sealed class TestTagModule : ModuleBase
         }
 
         var g = Ui.Grid();
+        g.Columns.Add(Ui.StatusCol("Result", "Result", 80));
         g.Columns.Add(Ui.Col("Tag", "Tag", 90));
         g.Columns.Add(Ui.Col("Description", "Description"));
-        g.Columns.Add(Ui.Col("Location", "Location", 130));
-        g.Columns.Add(Ui.Col("Class", "Class", 55));
-        g.Columns.Add(Ui.Col("Result", "Result", 70));
+        g.Columns.Add(Ui.Col("Location", "Location", 140));
+        g.Columns.Add(Ui.Col("Class", "Class", 60));
         g.Columns.Add(Ui.Col("Certificate", "Certificate", 105));
-        g.Columns.Add(Ui.Col("Next due", "Due", 100));
+        g.Columns.Add(Ui.Col("Site", "Site", 200));
+        g.Columns.Add(Ui.Col("Next due", "Due", 95));
         g.ItemsSource = rows;
-        Body.Children.Add(g);
+        Body.Children.Add(Ui.GridCard(g, $"{rows.Count} item(s) · {rows.Count(r => r.Result == "fail")} failed", Ui.GList));
     }
 
     /// <summary>Opens the editor, then reloads so the list reflects any change.</summary>
@@ -264,30 +315,46 @@ public sealed class ClientsModule : ModuleBase
 {
     public ClientsModule() : base(
         "Clients",
-        "Contact details, sites and job history.")
+        "Everyone you work for. Clients sync to the website as portal accounts.")
     {
         var clients = Repository.GetClients();
+        var jobs = Repository.GetJobs();
+        var invoices = Repository.GetInvoices();
+
+        var g = Ui.Grid();
+        Body.Children.Add(Ui.Toolbar(
+            Forms.Btn("New Client", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd),
+            Forms.Btn("Edit", (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is { } sel) Edit((Client)sel); }, glyph: Ui.GEdit)));
+
         if (clients.Count == 0)
         {
-            Body.Children.Add(Ui.Empty(
-                "No clients stored locally yet. Use Sync ▸ Sync Now to pull them from the server."));
+            Body.Children.Add(Ui.Empty("No clients stored locally yet. Use Sync ▸ Sync Now to pull them from the server, or add one."));
             return;
         }
 
-        var g = Ui.Grid();
-        g.Columns.Add(Ui.Col("Name", nameof(Client.Name), 170));
-        g.Columns.Add(Ui.Col("Company", nameof(Client.Company)));
-        g.Columns.Add(Ui.Col("Email", nameof(Client.Email), 200));
-        g.Columns.Add(Ui.Col("Phone", nameof(Client.Phone), 130));
-        g.ItemsSource = clients;
-        g.MouseDoubleClick += (_, _) => { if (g.SelectedItem is Client c) Edit(c); };
-        Body.Children.Add(g);
-        Body.Children.Add(new TextBlock
+        var rows = clients.Select(c => new
         {
-            Text = "Double-click a client to edit.",
-            FontSize = 11, Foreground = Ui.Res("FaintText"),
-            Margin = new Thickness(0, 6, 0, 0),
-        });
+            C = c,
+            c.Name,
+            c.Company,
+            c.Email,
+            c.Phone,
+            Jobs = jobs.Count(j => j.ClientId == c.Id),
+            Owing = invoices.Where(i => i.ClientId == c.Id && i.IsUnpaid && Invoice.Normalise(i.Status) != "draft").Sum(i => i.Total) is var o && o > 0 ? $"${o:0.00}" : "",
+            Web = string.IsNullOrEmpty(c.ServerId) ? (c.Email.Length == 0 ? "no email" : "pending") : "active",
+        }).ToList();
+
+        g.Columns.Add(Ui.Col("Name", "Name", 170));
+        g.Columns.Add(Ui.Col("Company", "Company"));
+        g.Columns.Add(Ui.Col("Email", "Email", 210));
+        g.Columns.Add(Ui.Col("Phone", "Phone", 120));
+        g.Columns.Add(Ui.Col("Jobs", "Jobs", 55));
+        g.Columns.Add(Ui.Col("Owing", "Owing", 85));
+        g.Columns.Add(Ui.StatusCol("Portal", "Web", 90));
+        g.ItemsSource = rows;
+        g.MouseDoubleClick += (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is { } sel) Edit((Client)sel); };
+        Body.Children.Add(Ui.GridCard(g, $"{rows.Count} client(s)", Ui.GPeople,
+            new TextBlock { Text = "Double-click to edit", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
     }
 
     private void Edit(Client? c)
@@ -303,32 +370,36 @@ public sealed class InvoicesModule : ModuleBase
 {
     public InvoicesModule(string view = "") : base(
         view == "unpaid" ? "Unpaid Invoices" : "Invoices",
-        "Raise invoices from completed jobs and track what's outstanding.")
+        "Raise invoices from completed jobs and track what's outstanding. Anything but a draft appears in the client's portal.")
     {
         var all = Repository.GetInvoices();
-        var rows = view == "unpaid" ? all.Where(i => i.IsUnpaid).ToList() : all;
+        var names = Repository.GetClients().ToDictionary(c => c.Id, c => c.Display);
+        var rows = (view == "unpaid" ? all.Where(i => i.IsUnpaid).ToList() : all)
+            .Select(i => new
+            {
+                Inv = i,
+                i.Number,
+                Client = i.ClientId is not null && names.TryGetValue(i.ClientId, out var n) ? n : "",
+                Issued = i.IssuedDate,
+                Due = i.DueDate,
+                Total = $"${i.Total:0.00}",
+                Status = Invoice.Normalise(i.Status),
+            }).ToList();
 
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
-        var add = new Button
-        {
-            Content = "New Invoice",
-            Padding = new Thickness(14, 6, 14, 6),
-            Background = Ui.Res("AccentBrush"),
-            Foreground = Brushes.White,
-            FontWeight = FontWeights.SemiBold,
-        };
-        add.Click += (_, _) => Edit(null);
-        bar.Children.Add(add);
+        var g = Ui.Grid();
+        Body.Children.Add(Ui.Toolbar(
+            Forms.Btn("New Invoice", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd),
+            Forms.Btn("Invoice a Job…", (_, _) => Edit(null), glyph: Ui.GBolt),
+            Forms.Btn("Open", (_, _) => { if (Ui.Prop(g.SelectedItem, "Inv") is { } sel) Edit((Invoice)sel); }, glyph: Ui.GEdit)));
 
-        var fromJob = new Button
-        {
-            Content = "Invoice a Job...",
-            Padding = new Thickness(14, 6, 14, 6),
-            Margin = new Thickness(8, 0, 0, 0),
-        };
-        fromJob.Click += (_, _) => Edit(null);
-        bar.Children.Add(fromJob);
-        Body.Children.Add(bar);
+        var unpaid = all.Where(i => i.IsUnpaid && Invoice.Normalise(i.Status) != "draft").ToList();
+        var tiles = new WrapPanel();
+        tiles.Children.Add(Ui.Tile($"${unpaid.Sum(i => i.Total):0.00}", $"Outstanding · {unpaid.Count} invoice(s)", unpaid.Count > 0 ? "WarnBrush" : "OkBrush", Ui.GMoney));
+        var overdueCount = unpaid.Count(i => string.CompareOrdinal(i.DueDate, DateTime.Today.ToString("yyyy-MM-dd")) < 0);
+        tiles.Children.Add(Ui.Tile(overdueCount.ToString(), "Past their due date", overdueCount > 0 ? "BadBrush" : "OkBrush", Ui.GWarn));
+        var month = DateTime.Today.ToString("yyyy-MM");
+        tiles.Children.Add(Ui.Tile($"${all.Where(i => Invoice.Normalise(i.Status) == "paid" && i.IssuedDate.StartsWith(month)).Sum(i => i.Total):0.00}", "Paid, issued this month", "OkBrush", Ui.GCheck));
+        Body.Children.Add(tiles);
 
         if (rows.Count == 0)
         {
@@ -338,21 +409,16 @@ public sealed class InvoicesModule : ModuleBase
             return;
         }
 
-        var g = Ui.Grid();
-        g.Columns.Add(Ui.Col("Number", nameof(Invoice.Number), 120));
-        g.Columns.Add(Ui.Col("Issued", nameof(Invoice.IssuedDate), 100));
-        g.Columns.Add(Ui.Col("Due", nameof(Invoice.DueDate), 100));
-        g.Columns.Add(Ui.Col("Total", nameof(Invoice.Total), 90));
-        g.Columns.Add(Ui.Col("Status", nameof(Invoice.Status), 90));
+        g.Columns.Add(Ui.StatusCol("Status", "Status", 95));
+        g.Columns.Add(Ui.Col("Number", "Number", 110));
+        g.Columns.Add(Ui.Col("Client", "Client"));
+        g.Columns.Add(Ui.Col("Issued", "Issued", 100));
+        g.Columns.Add(Ui.Col("Due", "Due", 100));
+        g.Columns.Add(Ui.Col("Total", "Total", 95));
         g.ItemsSource = rows;
-        g.MouseDoubleClick += (_, _) => { if (g.SelectedItem is Invoice i) Edit(i); };
-        Body.Children.Add(g);
-        Body.Children.Add(new TextBlock
-        {
-            Text = "Double-click an invoice to edit. Use \"Invoice a Job\" to bill a completed job.",
-            FontSize = 11, Foreground = Ui.Res("FaintText"),
-            Margin = new Thickness(0, 6, 0, 0),
-        });
+        g.MouseDoubleClick += (_, _) => { if (Ui.Prop(g.SelectedItem, "Inv") is { } sel) Edit((Invoice)sel); };
+        Body.Children.Add(Ui.GridCard(g, $"{rows.Count} invoice(s)", Ui.GMoney,
+            new TextBlock { Text = "Double-click to open · Invoice a Job fills the lines from a job", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
     }
 
     private void Edit(Invoice? inv)
@@ -392,13 +458,12 @@ public sealed class CalendarModule : ModuleBase
     {
         _view = view;
 
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
-        bar.Children.Add(Forms.Btn("New Booking", (_, _) => Edit(null), primary: true));
-        bar.Children.Add(Forms.Btn("Edit", (_, _) => { if (Selected() is { } a) Edit(a); }));
-        bar.Children.Add(Forms.Btn("Confirm", (_, _) => SetStatus("confirmed")));
-        bar.Children.Add(Forms.Btn("Decline", (_, _) => SetStatus("cancelled")));
-        bar.Children.Add(Forms.Btn("Delete", (_, _) => Delete()));
-        Body.Children.Add(bar);
+        Body.Children.Add(Ui.Toolbar(
+            Forms.Btn("New Booking", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd),
+            Forms.Btn("Edit", (_, _) => { if (Selected() is { } a) Edit(a); }, glyph: Ui.GEdit),
+            Forms.Btn("Confirm", (_, _) => SetStatus("confirmed"), glyph: Ui.GCheck),
+            Forms.Btn("Decline", (_, _) => SetStatus("cancelled"), glyph: "\uE711"),
+            Forms.Btn("Delete", (_, _) => Delete(), glyph: Ui.GDelete)));
 
         var appts = Repository.GetAppointments();
         var clients = Repository.GetClients().ToDictionary(c => c.Id, c => c.Display);
@@ -437,18 +502,14 @@ public sealed class CalendarModule : ModuleBase
             return;
         }
 
+        _grid.Columns.Add(Ui.StatusCol("Status", nameof(Row.Status), 100));
         _grid.Columns.Add(Ui.Col("Date", nameof(Row.When), 130));
         _grid.Columns.Add(Ui.Col("What", nameof(Row.What)));
-        _grid.Columns.Add(Ui.Col("Client", nameof(Row.Client), 200));
-        _grid.Columns.Add(Ui.Col("Status", nameof(Row.Status), 90));
+        _grid.Columns.Add(Ui.Col("Client", nameof(Row.Client), 220));
         _grid.ItemsSource = rows;
         _grid.MouseDoubleClick += (_, _) => { if (Selected(quiet: true) is { } a) Edit(a); };
-        Body.Children.Add(_grid);
-        Body.Children.Add(new TextBlock
-        {
-            Text = "Double-click a booking to edit it. Retests come from test and tag jobs.",
-            FontSize = 11, Foreground = Ui.Res("FaintText"), Margin = new Thickness(0, 6, 0, 0),
-        });
+        Body.Children.Add(Ui.GridCard(_grid, $"{rows.Count} entr{(rows.Count == 1 ? "y" : "ies")}", Ui.GCalendar,
+            new TextBlock { Text = "Double-click a booking to edit · retests come from jobs", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
     }
 
     private Appointment? Selected(bool quiet = false)
@@ -496,11 +557,26 @@ public sealed class SettingsModule : ModuleBase
         "Settings",
         "Tester details, equipment and the connection to zoltanstudios.au.")
     {
+        Body.Children.Add(Ui.Toolbar(
+            Forms.Btn("Tester Defaults…", (_, _) =>
+            {
+                if (new TesterDefaultsWindow { Owner = Window.GetWindow(this) }.ShowDialog() == true)
+                    (Window.GetWindow(this) as MainWindow)?.ReloadCurrent();
+            }, glyph: Ui.GEdit),
+            Forms.Btn("Pricing", (_, _) => (Window.GetWindow(this) as MainWindow)?.Navigate("pricing"), glyph: Ui.GTag)));
+
+        _info = new StackPanel();
+        _info.Children.Add(Ui.Heading("Connection and data", Ui.GSync, 14));
+        _info.Children.Add(new Border { Height = 12 });
         AddRow("Server", Repository.GetSetting("ServerUrl", "https://zoltanstudios.au"));
         AddRow("Signed in as", Repository.GetSetting("SignedInAs", "not signed in"));
         AddRow("Last sync", Repository.GetSetting("LastSync", "never"));
         AddRow("Waiting to sync", Repository.PendingSyncCount() + " change(s)");
         AddRow("Database", Database.Path);
+        AddRow("Tester", $"{Repository.GetSetting("TesterName", "(not set)")} · {Repository.GetSetting("TesterLicence", "no licence no. set")}");
+        AddRow("Test equipment", $"{Repository.GetSetting("TestEquipment", "Wavecom TnT RCD")}" +
+            (Repository.GetSetting("CalibrationDate", "") is { Length: > 0 } cd ? $" · calibrated {cd}" : " · calibration date not set"));
+        Body.Children.Add(Ui.Card(_info, 18));
 
         BuildSyncProblems();
         BuildRateEditor();
@@ -532,7 +608,7 @@ public sealed class SettingsModule : ModuleBase
         g.Columns.Add(Ui.Col("Tries", nameof(Repository.SyncProblem.Attempts), 50));
         g.Columns.Add(Ui.Col("Reason from the server", nameof(Repository.SyncProblem.Error)));
         g.ItemsSource = problems;
-        Body.Children.Add(g);
+        Body.Children.Add(Ui.GridCard(g));
 
         var discard = Forms.Btn("Stop trying to send selected", (_, _) =>
         {
@@ -556,16 +632,17 @@ public sealed class SettingsModule : ModuleBase
     {
         var rates = Rates.Load();
         var boxes = new Dictionary<string, TextBox>();
+        var rateCard = new StackPanel();
 
-        Body.Children.Add(new TextBlock
+        rateCard.Children.Add(new TextBlock
         {
             Text = "Rates",
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Foreground = Ui.Res("HeadingText"),
-            Margin = new Thickness(0, 24, 0, 2),
+            Margin = new Thickness(0, 0, 0, 2),
         });
-        Body.Children.Add(new TextBlock
+        rateCard.Children.Add(new TextBlock
         {
             Text = "Used by the Quote Calculator. Test & tag and 3D printing match the website — "
                  + "if you change them here, change them on the site too.",
@@ -577,7 +654,7 @@ public sealed class SettingsModule : ModuleBase
 
         void Group(string heading, params (string Prop, string Label)[] fields)
         {
-            Body.Children.Add(new TextBlock
+            rateCard.Children.Add(new TextBlock
             {
                 Text = heading,
                 FontSize = 12,
@@ -612,14 +689,16 @@ public sealed class SettingsModule : ModuleBase
                 stack.Children.Add(box);
                 wrap.Children.Add(stack);
             }
-            Body.Children.Add(wrap);
+            rateCard.Children.Add(wrap);
         }
 
         Group("Test & Tag",
             ("CallOut", "Call-out ($)"), ("CallOutIncludes", "Items included"),
             ("PerItemStandard", "Standard ($)"), ("PerItemPowerTool", "Power tool ($)"),
             ("PerItemRcd", "RCD ($)"), ("PerItemMicrowave", "Microwave ($)"),
-            ("PerItem100", "100+ items ($)"), ("PerItem200", "200+ items ($)"));
+            ("PerItem100", "100+ items ($)"), ("PerItem200", "200+ items ($)"),
+            ("IntroOfferPrice", "Intro offer ($ flat)"), ("IntroOfferItems", "Intro offer items"),
+            ("ContractQuarterlyPercent", "Quarterly contract (% off)"), ("ContractAnnualPercent", "Annual contract (% off)"));
 
         Group("PC Building",
             ("PcBuildLabour", "Build labour ($)"), ("PcBuildOsSetup", "OS setup ($)"),
@@ -650,6 +729,7 @@ public sealed class SettingsModule : ModuleBase
             Padding = new Thickness(16, 6, 16, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
             Background = Ui.Res("AccentBrush"),
+            BorderBrush = Ui.Res("AccentBrush"),
             Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 12, 0, 0),
@@ -669,8 +749,11 @@ public sealed class SettingsModule : ModuleBase
             MessageBox.Show("Rates saved.", "Settings",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         };
-        Body.Children.Add(save);
+        rateCard.Children.Add(save);
+        Body.Children.Add(Ui.Card(rateCard, 18));
     }
+
+    private StackPanel _info = new();
 
     private void AddRow(string label, string value)
     {
@@ -690,6 +773,6 @@ public sealed class SettingsModule : ModuleBase
         Grid.SetColumn(v, 1);
         row.Children.Add(l);
         row.Children.Add(v);
-        Body.Children.Add(row);
+        _info.Children.Add(row);
     }
 }

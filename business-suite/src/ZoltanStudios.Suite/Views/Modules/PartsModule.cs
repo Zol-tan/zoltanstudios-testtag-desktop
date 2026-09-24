@@ -63,7 +63,7 @@ public sealed class PartsModule : ModuleBase
         g.Columns.Add(Ui.Col("Left", nameof(Part.OnHand), 60));
         g.Columns.Add(Ui.Col("Low at", nameof(Part.LowAt), 70));
         g.ItemsSource = low;
-        Body.Children.Add(g);
+        Body.Children.Add(Ui.GridCard(g, $"{low.Count} part(s) to reorder", Ui.GWarn));
     }
 
     // ================================================================== stock
@@ -182,7 +182,7 @@ public sealed class PartsModule : ModuleBase
         });
 
         _grid.CellEditEnding += (_, _) => Dispatcher.BeginInvoke(new Action(SaveEdits));
-        Body.Children.Add(_grid);
+        Body.Children.Add(Ui.GridCard(_grid, "Parts catalogue", Ui.GRepair));
 
         Body.Children.Add(new TextBlock
         {
@@ -216,6 +216,7 @@ public sealed class PartsModule : ModuleBase
         if (primary)
         {
             b.Background = Ui.Res("AccentBrush");
+            b.BorderBrush = b.Background;
             b.Foreground = Brushes.White;
             b.FontWeight = FontWeights.SemiBold;
         }

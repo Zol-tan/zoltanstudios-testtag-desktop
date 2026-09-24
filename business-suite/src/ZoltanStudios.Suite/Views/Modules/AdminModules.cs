@@ -17,7 +17,7 @@ namespace ZoltanStudios.Suite.Views.Modules;
 /// </summary>
 public abstract class LiveModule : ModuleBase
 {
-    protected readonly StackPanel Toolbar = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+    protected readonly WrapPanel Toolbar = new() { Margin = new Thickness(0, 0, 0, 14) };
     protected readonly StackPanel List = new();
     private readonly TextBlock _status = new() { FontSize = 11, Margin = new Thickness(0, 8, 0, 0), TextWrapping = TextWrapping.Wrap };
 
@@ -25,7 +25,7 @@ public abstract class LiveModule : ModuleBase
 
     protected LiveModule(string title, string subtitle) : base(title, subtitle)
     {
-        Toolbar.Children.Add(Forms.Btn("Refresh", async (_, _) => await ReloadAsync()));
+        Toolbar.Children.Add(Forms.Btn("Refresh", async (_, _) => await ReloadAsync(), glyph: Ui.GRefresh));
         Body.Children.Add(Toolbar);
         Body.Children.Add(List);
         Body.Children.Add(_status);
@@ -100,7 +100,8 @@ public abstract class LiveModule : ModuleBase
     protected static DataGrid Grid(IEnumerable<(string Header, string Path, double Width)> cols)
     {
         var g = Ui.Grid();
-        foreach (var (h, p, w) in cols) g.Columns.Add(Ui.Col(h, p, w));
+        foreach (var (h, p, w) in cols)
+            g.Columns.Add(p is "Status" or "State" ? Ui.StatusCol(h, p, w) : Ui.Col(h, p, w));
         return g;
     }
 }
@@ -116,10 +117,10 @@ public sealed class ProjectsModule : LiveModule
 
     public ProjectsModule() : base("Projects", "Client projects shown in their portal. Edit status and progress, and choose who can see each one.")
     {
-        Toolbar.Children.Insert(0, Forms.Btn("New Project", (_, _) => Edit(null), primary: true));
-        Toolbar.Children.Add(Forms.Btn("Edit", (_, _) => { if (Selected() is { } p) Edit(p); }));
-        Toolbar.Children.Add(Forms.Btn("Access...", (_, _) => { if (Selected() is { } p) Access(p); }));
-        Toolbar.Children.Add(Forms.Btn("Delete", async (_, _) => await Delete()));
+        Toolbar.Children.Insert(0, Forms.Btn("New Project", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd));
+        Toolbar.Children.Add(Forms.Btn("Edit", (_, _) => { if (Selected() is { } p) Edit(p); }, glyph: Ui.GEdit));
+        Toolbar.Children.Add(Forms.Btn("Access...", (_, _) => { if (Selected() is { } p) Access(p); }, glyph: Ui.GPeople));
+        Toolbar.Children.Add(Forms.Btn("Delete", async (_, _) => await Delete(), glyph: Ui.GDelete));
     }
 
     private ProjectRow? Selected()
@@ -152,7 +153,7 @@ public sealed class ProjectsModule : LiveModule
         });
         _grid.ItemsSource = rows;
         _grid.MouseDoubleClick += (_, _) => { if (_grid.SelectedItem is ProjectRow p) Edit(p); };
-        List.Children.Add(_grid);
+        List.Children.Add(Ui.GridCard(_grid));
         SetStatus($"{rows.Count} project(s). Double-click to edit.");
     }
 
@@ -337,8 +338,8 @@ public sealed class MessagesModule : LiveModule
 
     public MessagesModule() : base("Messages", "Conversations with clients from the portal. Open one to read the thread and reply.")
     {
-        Toolbar.Children.Insert(0, Forms.Btn("New Message", (_, _) => New(), primary: true));
-        Toolbar.Children.Add(Forms.Btn("Open", (_, _) => Open()));
+        Toolbar.Children.Insert(0, Forms.Btn("New Message", (_, _) => New(), primary: true, glyph: Ui.GAdd));
+        Toolbar.Children.Add(Forms.Btn("Open", (_, _) => Open(), glyph: Ui.GOpen));
     }
 
     protected override async Task LoadAsync()
@@ -361,7 +362,7 @@ public sealed class MessagesModule : LiveModule
         });
         _grid.ItemsSource = rows;
         _grid.MouseDoubleClick += (_, _) => Open();
-        List.Children.Add(_grid);
+        List.Children.Add(Ui.GridCard(_grid));
         var unread = rows.Count(x => x.Unread && !x.IsClosed);
         SetStatus($"{rows.Count} conversation(s), {unread} with new messages. Double-click to open.");
     }
@@ -555,14 +556,14 @@ public sealed class QuotesModule : LiveModule
 
     public QuotesModule() : base("Quotes", "3D printing quotes, as kept by the admin panel. Save one from the 3D Printing Quote tool, or add it here.")
     {
-        Toolbar.Children.Insert(0, Forms.Btn("New Quote", (_, _) => Edit(null), primary: true));
-        Toolbar.Children.Add(Forms.Btn("Edit", (_, _) => { if (Selected() is { } q) Edit(q); }));
+        Toolbar.Children.Insert(0, Forms.Btn("New Quote", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd));
+        Toolbar.Children.Add(Forms.Btn("Edit", (_, _) => { if (Selected() is { } q) Edit(q); }, glyph: Ui.GEdit));
         _setStatus.Margin = new Thickness(8, 0, 6, 0);
         _setStatus.MinWidth = 100;
         Toolbar.Children.Add(new TextBlock { Text = "Mark as", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Foreground = Ui.Res("MutedText") });
         Toolbar.Children.Add(_setStatus);
-        Toolbar.Children.Add(Forms.Btn("Apply", async (_, _) => await SetStatus()));
-        Toolbar.Children.Add(Forms.Btn("Delete", async (_, _) => await Delete()));
+        Toolbar.Children.Add(Forms.Btn("Apply", async (_, _) => await SetStatus(), glyph: Ui.GCheck));
+        Toolbar.Children.Add(Forms.Btn("Delete", async (_, _) => await Delete(), glyph: Ui.GDelete));
     }
 
     private QuoteRow? Selected()
@@ -594,7 +595,7 @@ public sealed class QuotesModule : LiveModule
         });
         _grid.ItemsSource = rows;
         _grid.MouseDoubleClick += (_, _) => { if (_grid.SelectedItem is QuoteRow q) Edit(q); };
-        List.Children.Add(_grid);
+        List.Children.Add(Ui.GridCard(_grid));
 
         var open = rows.Where(q => q.Status is "draft" or "sent").Sum(q => q.Total);
         SetStatus($"{rows.Count} quote(s). ${open:0.00} in draft or sent quotes. Double-click to edit.");
@@ -767,8 +768,8 @@ public sealed class TokensModule : LiveModule
     {
         Toolbar.Children.Add(new TextBlock { Text = "Label", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Foreground = Ui.Res("MutedText") });
         Toolbar.Children.Add(_label);
-        Toolbar.Children.Add(Forms.Btn("Create Token", async (_, _) => await Create(), primary: true));
-        Toolbar.Children.Add(Forms.Btn("Revoke", async (_, _) => await Revoke(), danger: true));
+        Toolbar.Children.Add(Forms.Btn("Create Token", async (_, _) => await Create(), primary: true, glyph: Ui.GAdd));
+        Toolbar.Children.Add(Forms.Btn("Revoke", async (_, _) => await Revoke(), danger: true, glyph: Ui.GDelete));
     }
 
     protected override async Task LoadAsync()
@@ -787,7 +788,7 @@ public sealed class TokensModule : LiveModule
             ("Created", nameof(TokenRow.Created), 130.0),
         });
         _grid.ItemsSource = rows;
-        List.Children.Add(_grid);
+        List.Children.Add(Ui.GridCard(_grid));
         SetStatus($"{rows.Count} token(s).");
     }
 

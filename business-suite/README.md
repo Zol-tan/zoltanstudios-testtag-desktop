@@ -14,7 +14,7 @@ native app — the whole admin panel (`admin.html`, `admin-tools.html`) plus the
 tools and calculators. Public customer-facing pages (home, services, blog,
 client portal, certificate lookup) stay on the website.
 
-## Status — version 0.2.0
+## Status — version 0.3.0
 
 | Admin panel feature | Endpoint(s) | Suite |
 |---|---|---|
@@ -29,6 +29,14 @@ client portal, certificate lookup) stay on the website.
 | Quotes (3D print) | `services.php?resource=quotes` list, create, update, update_status, delete | Done — live, plus "Save as Quote" from the 3D Printing Quote tool |
 | API tokens | `services.php?resource=tokens` list, create, revoke | Done — live |
 | Quote Calculator, 3D Print Quote, Parts, Settings | — | Done |
+| **Test & Tag App** (the web app, built in) | `testtag-app.html` in WebView2, API token created automatically | Done — 0.3 |
+| Find (Ctrl+F) | local: clients, jobs, tags/serials, invoices, bookings | Done — 0.3 |
+| Import / Export backup | whole local database, `.zsbackup` | Done — 0.3 |
+| Pricing page, Tester Defaults | local | Done — 0.3 |
+| Appliance Library + "Add from Library" in the job editor | local, seeded with the web app's 212 appliances | Done — 0.3 |
+| Filament stock | local (spools, use log, low stock) | Done — 0.3 |
+| Retest reminder emails | opens your mail program from Retest Due | Done — 0.3 |
+| AS/NZS 3760 reference, Wavecom TnT guide | Help pages | Done — 0.3 |
 
 "Local + sync" sections work offline and sync on F5. "Live" sections read and
 write the server directly, like the admin panel does, and need a connection.
@@ -66,8 +74,18 @@ ways) and every live admin call. Needs PHP with pdo_sqlite and the .NET 8 SDK.
 Add `--old-server` (with `OLD_DATA_PHP=` pointing at a previous data.php) to
 check the fallbacks for a server that hasn't been updated.
 
-The WPF windows themselves are compile-checked only; click through them on
-Windows after each build.
+The WPF windows themselves are compile-checked only (the build compiles the
+XAML); click through them on Windows after each build.
+
+## The built-in Test & Tag App
+
+The sidebar's **Test & Tag App** runs `testtag-app.html` from the website
+inside the suite using Microsoft Edge WebView2 (installed on Windows 10/11).
+Its profile lives in `%LocalAppData%\ZoltanStudios\WebView2`, so the app's own
+saved jobs and settings survive restarts. The page has no login, so the suite
+creates an API token for it (label "Business Suite built-in app (PC name)") and
+writes it into the page's server settings; **Reconnect** makes a new one if it
+was revoked. The page is kept alive while you use other sections.
 
 ## Layout
 

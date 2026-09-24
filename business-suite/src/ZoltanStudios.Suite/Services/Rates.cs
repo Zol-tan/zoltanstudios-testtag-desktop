@@ -19,6 +19,10 @@ public sealed class Rates
     public double PerItemMicrowave { get; set; } = 12.00;
     public double PerItem100 { get; set; } = 2.90;
     public double PerItem200 { get; set; } = 2.50;
+    public double IntroOfferPrice { get; set; } = 99;          // flat, first job
+    public int IntroOfferItems { get; set; } = 30;
+    public double ContractQuarterlyPercent { get; set; } = 10; // off, on a quarterly contract
+    public double ContractAnnualPercent { get; set; } = 15;
 
     // ---- 3D printing (must match 3d-printing-services.html) -------------
     public double PrintSetup { get; set; } = 15;

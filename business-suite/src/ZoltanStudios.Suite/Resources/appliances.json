@@ -1,0 +1,1274 @@
+[
+ {
+  "category": "Office & IT",
+  "name": "Desktop Computer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Laptop Charger / Power Brick",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Monitor / Screen",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Printer (inkjet)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Printer (laser)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Printer (multifunction)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Photocopier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Scanner",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Shredder",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "UPS / Battery Backup",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Network Switch / Hub",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Modem / Router",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Electric Stapler",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Label Printer",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Cash Register / POS Terminal",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Barcode Scanner (powered)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Projector",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Interactive Whiteboard",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Office & IT",
+  "name": "Desk Phone (powered)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Office & IT",
+  "name": "EFTPOS Terminal",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Kettle (domestic)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Kettle / Urn (commercial)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Toaster (2-slice)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Toaster (4-slice)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Toaster Oven / Benchtop Oven",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Coffee Machine (domestic)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Coffee Machine (commercial)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Coffee Grinder",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Espresso Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Blender",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Food Processor",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Bar Fridge / Refrigerator",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Refrigerator (full-size)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Sandwich Press / Jaffle Maker",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Panini Press / Contact Grill",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Electric Frypan",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Electric Wok",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Rice Cooker",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Slow Cooker / Crockpot",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Deep Fryer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Pie Warmer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Bain Marie / Food Warmer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Hot Dog / Sausage Warmer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Waffle Maker",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Popcorn Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Milkshake Maker",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Juicer / Citrus Press",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Electric Can Opener",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Sous Vide Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Induction Cooktop (portable)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Hot Plate / Electric Hotplate",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Water Boiler / Instant Hot Water",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Kitchen & Hospitality",
+  "name": "Dishwasher",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Microwave",
+  "name": "Microwave Oven (domestic)",
+  "itemType": "microwave",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Microwave",
+  "name": "Microwave Oven (commercial)",
+  "itemType": "microwave",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Microwave",
+  "name": "Combination Microwave / Convection",
+  "itemType": "microwave",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Extension Lead (single outlet)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Power Board (multi-outlet, no surge)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Power Board (with surge protection / MOV)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Power Board (RCD-protected)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Extension Lead (industrial, 3-pin)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Extension Lead (industrial, 4-pin)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Piggyback Plug / Adaptor",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Retractable Extension Lead",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Extension Leads & Boards",
+  "name": "Cable Reel / Drum",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Safety Switches / RCD",
+  "name": "Portable RCD (inline safety switch)",
+  "itemType": "rcd",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Safety Switches / RCD",
+  "name": "Portable RCD (socket outlet type)",
+  "itemType": "rcd",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Safety Switches / RCD",
+  "name": "RCD Adaptor Plug",
+  "itemType": "rcd",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Vacuum Cleaner (upright)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Vacuum Cleaner (barrel / cylinder)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Vacuum Cleaner (backpack)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Vacuum Cleaner (robotic, charger)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Wet / Dry Vacuum (workshop vac)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Carpet Cleaner / Shampooer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Steam Cleaner",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Steam Mop",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Floor Polisher / Buffer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Pressure Washer (electric)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Cleaning Equipment",
+  "name": "Window Vac",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Pedestal Fan",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Desk Fan",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Tower Fan",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Box Fan / Window Fan",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Portable Air Conditioner",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Evaporative Cooler (portable)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Dehumidifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Humidifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Air Purifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Bar Heater / Radiant Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Fan Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Oil Column Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Panel Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Infrared Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Convection Heater",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Heating & Cooling",
+  "name": "Heated Towel Rail (portable)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Hair Dryer",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Hair Straightener / Flat Iron",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Curling Iron / Wand",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Hair Clippers (corded)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Electric Shaver (corded)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Beard Trimmer (corded)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Nail Drill / File",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "UV / LED Nail Lamp",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Facial Steamer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Hair & Beauty",
+  "name": "Massage Chair / Massager",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Washing Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Clothes Dryer (electric)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Washer / Dryer Combo",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Iron (clothes)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Garment Steamer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Laundry",
+  "name": "Ironing Press",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Television",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Large Format Display",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "DVD / Blu-ray Player",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Streaming Device (powered)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Set Top Box",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Gaming Console",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Soundbar",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Amplifier / Receiver (hi-fi)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Active Speakers / Powered Speakers",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Subwoofer (powered)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Guitar Amplifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Bass Amplifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Keyboard Amplifier",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "PA / Public Address System",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "DJ Mixer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Karaoke Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Electric Keyboard / Piano",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Audio Visual & Entertainment",
+  "name": "Electronic Drum Kit",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Angle Grinder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Circular Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Jigsaw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Reciprocating Saw / Sabre Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Drill (corded)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Hammer Drill / Rotary Hammer",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Impact Wrench (corded)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Orbital Sander",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Belt Sander",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Disc Sander",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Router (wood)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Planer (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Biscuit Joiner",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Heat Gun",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Soldering Iron (corded)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Hot Glue Gun (industrial)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Mitre Saw / Drop Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Table Saw / Bench Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Scroll Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Band Saw (portable)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Electric Hedge Trimmer",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Electric Lawn Mower",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Electric Chainsaw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Electric Leaf Blower",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Core Drill",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Demolition Hammer / Jackhammer",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Tile Cutter (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Wet Tile Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Concrete Mixer (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Concrete Vibrator",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Rebar Cutter (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Power Tools",
+  "name": "Pipe Threader (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "MIG Welder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "TIG Welder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Arc / Stick Welder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Plasma Cutter",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Spot Welder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Bench Grinder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Pedestal Drill / Drill Press",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Lathe (metal, electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Surface Grinder",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Metal Band Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Metal Cutting Saw",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Air Compressor (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "3D Printer",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Laser Engraver / Cutter",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "CNC Router (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Electric Hoist / Winch",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Industrial Fan (large)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Submersible Pump",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Water Pump (electric)",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Industrial / Workshop",
+  "name": "Ultrasonic Cleaner",
+  "itemType": "power_tool",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Battery Charger (automotive)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Jump Starter (plug-in)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Car Polisher / Buffer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Tyre Inflator (electric)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Soldering Station (bench)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Bench Power Supply",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Oscilloscope (bench)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Spot Welder (automotive)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Pressure Washer (heavy duty)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Trade & Automotive",
+  "name": "Parts Washer (electric)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "CPAP / BiPAP Machine",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Nebuliser",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Blood Pressure Monitor (electric)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Electric Blanket",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Heating Pad / Heat Pack",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Infrared Lamp",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Tens Machine",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Air Mattress Pump (electric)",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Medical & Care",
+  "name": "Stair Lift (powered)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Sewing Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Embroidery Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Laminator",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Binding Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Electric Scissors",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Other",
+  "name": "Franking Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Coin Counter / Cash Counter",
+  "itemType": "standard",
+  "equipmentClass": "II"
+ },
+ {
+  "category": "Other",
+  "name": "Vending Machine (internal unit)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Fish Tank / Aquarium Pump",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Smoke Machine / Fog Machine",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Hot Press (signage)",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ },
+ {
+  "category": "Other",
+  "name": "Ticket Printer",
+  "itemType": "standard",
+  "equipmentClass": "I"
+ }
+]

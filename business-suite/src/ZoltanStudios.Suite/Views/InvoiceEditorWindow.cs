@@ -183,6 +183,7 @@ public sealed class InvoiceEditorWindow : Window
         if (primary)
         {
             b.Background = (Brush)Application.Current.Resources["AccentBrush"];
+            b.BorderBrush = b.Background;
             b.Foreground = Brushes.White;
             b.FontWeight = FontWeights.SemiBold;
         }

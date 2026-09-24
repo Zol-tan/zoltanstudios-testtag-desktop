@@ -35,6 +35,10 @@ public partial class MainWindow : Window
             new RelayCommand(_ => SyncNow_Click(this, new RoutedEventArgs())),
             Key.F5, ModifierKeys.None));
 
+        InputBindings.Add(new KeyBinding(
+            new RelayCommand(_ => Navigate("find")), Key.F, ModifierKeys.Control));
+
+        BuildNav();
         Navigate("dashboard");
         _ = RestoreSessionAsync();
     }
@@ -51,26 +55,142 @@ public partial class MainWindow : Window
 
     private void SetConnectionState(bool connected)
     {
-        SyncDot.Fill = (System.Windows.Media.Brush)Application.Current.Resources[
-            connected ? "OkBrush" : "FaintText"];
+        var dot = (System.Windows.Media.Brush)Application.Current.Resources[connected ? "OkBrush" : "FaintText"];
+        SyncDot.Fill = dot;
+        SideDot.Fill = dot;
         SyncText.Text = connected
             ? "Connected" + (_api.SignedInAs is { Length: > 0 } who ? " · " + who : "")
             : "Offline";
+        SideStatus.Text = connected ? (_api.SignedInAs ?? "Connected") : "Not signed in";
+        SideStatus.ToolTip = SyncText.Text;
     }
 
     // ------------------------------------------------------------- navigation
 
+    /// <summary>The sidebar, in order. Section headings have an empty key.</summary>
+    private static readonly (string Key, string Label, string Glyph, bool Child)[] NavItems =
+    {
+        ("dashboard", "Dashboard", Ui.GHome, false),
+        ("", "TEST & TAG", "", false),
+        ("webapp", "Test & Tag App", Ui.GGlobe, false),
+        ("testtag", "Jobs", Ui.GBolt, false),
+        ("testtag.due", "Retest Due", Ui.GClock, true),
+        ("testtag.generator", "Generator Reports", Ui.GFlag, true),
+        ("testtag.assets", "Asset Register", Ui.GList, true),
+        ("", "BUSINESS", "", false),
+        ("clients", "Clients", Ui.GPeople, false),
+        ("projects", "Projects", Ui.GWork, false),
+        ("messages", "Messages", Ui.GChat, false),
+        ("quotes", "Quotes", Ui.GDoc, false),
+        ("invoices", "Invoices", Ui.GMoney, false),
+        ("invoices.unpaid", "Unpaid", Ui.GWarn, true),
+        ("calendar", "Calendar", Ui.GCalendar, false),
+        ("calendar.pending", "Booking Requests", Ui.GClock, true),
+        ("", "TOOLS", "", false),
+        ("quote", "Quote Calculator", Ui.GCalc, false),
+        ("printquote", "3D Printing Quote", Ui.GBox, false),
+        ("pricing", "Pricing", Ui.GTag, false),
+        ("appliances", "Appliance Library", Ui.GBook, false),
+        ("find", "Find", Ui.GSearch, false),
+        ("", "STOCK", "", false),
+        ("parts", "Parts", Ui.GRepair, false),
+        ("parts.restock", "Restock List", Ui.GWarn, true),
+        ("filament", "Filament", Ui.GBox, false),
+        ("", "HELP & ADMIN", "", false),
+        ("guide.3760", "AS/NZS 3760 Reference", Ui.GSchool, false),
+        ("guide.wavecom", "Wavecom TnT Guide", Ui.GHelp, false),
+        ("tokens", "API Tokens", Ui.GKey, false),
+        ("settings", "Settings", Ui.GSettings, false),
+    };
+
+    private readonly Dictionary<string, RadioButton> _navButtons = new();
+
+    private void BuildNav()
+    {
+        var style = (Style)Application.Current.Resources["NavItem"];
+        foreach (var (key, label, glyph, child) in NavItems)
+        {
+            if (key.Length == 0)
+            {
+                NavHost.Children.Add(new TextBlock
+                {
+                    Text = label,
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SidebarMuted"],
+                    Margin = new Thickness(20, 16, 0, 6),
+                });
+                continue;
+            }
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock
+            {
+                Text = glyph,
+                FontFamily = Ui.IconFont,
+                FontSize = child ? 12 : 15,
+                Width = 22,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = child ? 0.8 : 1,
+            });
+            row.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = child ? 12.5 : 13,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+
+            var rb = new RadioButton
+            {
+                Style = style,
+                GroupName = "nav",
+                Content = row,
+                Tag = key,
+                Margin = new Thickness(child ? 26 : 8, 1, 8, 1),
+            };
+            rb.Checked += (_, _) => { if (!_syncingNav) Navigate(key); };
+            _navButtons[key] = rb;
+            NavHost.Children.Add(rb);
+        }
+    }
+
+    private bool _syncingNav;
+
     /// <summary>
     /// Swaps the content pane. Sections are addressed as "module.view" so a
-    /// sub-item in the tree can open a filtered view of its parent module.
+    /// sub-item can open a filtered view of its parent module.
     /// </summary>
     private string _currentKey = "dashboard";
 
-    private void Navigate(string key)
+    /// <summary>The built-in test and tag web app is kept alive between visits, so nothing typed is lost.</summary>
+    private WebAppModule? _webApp;
+
+    public void Navigate(string key)
     {
         _currentKey = key;
         var module = key.Split('.')[0];
         var view = key.Contains('.') ? key.Split('.')[1] : "";
+
+        // Highlight the matching sidebar entry without re-triggering navigation.
+        _syncingNav = true;
+        if (_navButtons.TryGetValue(key, out var rb) || _navButtons.TryGetValue(module, out rb)) rb.IsChecked = true;
+        else foreach (var b in _navButtons.Values) b.IsChecked = false;
+        _syncingNav = false;
+
+        if (module == "webapp")
+        {
+            _webApp ??= new WebAppModule();
+            WebHost.Content = _webApp;
+            WebHost.Visibility = Visibility.Visible;
+            ContentHost.Visibility = Visibility.Collapsed;
+            ContentHost.Content = null;
+            StatusText.Text = "Test & Tag App";
+            return;
+        }
+
+        WebHost.Visibility = Visibility.Collapsed;
+        ContentHost.Visibility = Visibility.Visible;
 
         ContentControl page = module switch
         {
@@ -86,32 +206,18 @@ public partial class MainWindow : Window
             "quotes" => new QuotesModule(),
             "tokens" => new TokensModule(),
             "settings" => new SettingsModule(),
+            "find" => new FindModule(),
+            "pricing" => new PricingModule(),
+            "appliances" => new ApplianceLibraryModule(),
+            "filament" => new FilamentModule(),
+            "guide" => view == "wavecom" ? new WavecomGuideModule() : new ReferenceModule(),
             _          => new DashboardModule(),
         };
 
         ContentHost.Content = page;
-        StatusText.Text = module switch
-        {
-            "testtag"  => "Test & Tag",
-            "clients"  => "Clients",
-            "invoices" => "Invoices",
-            "calendar" => "Calendar",
-            "printquote" => "3D Printing Quote",
-            "quote" => "Quote Calculator",
-            "parts" => view == "restock" ? "Restock List" : "Parts",
-            "projects" => "Projects",
-            "messages" => "Messages",
-            "quotes" => "Quotes",
-            "tokens" => "API Tokens",
-            "settings" => "Settings",
-            _          => "Dashboard",
-        };
-    }
-
-    private void NavTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
-    {
-        if (e.NewValue is TreeViewItem { Tag: string key })
-            Navigate(key);
+        StatusText.Text = NavItems.FirstOrDefault(n => n.Key == key).Label
+                       ?? NavItems.FirstOrDefault(n => n.Key == module).Label
+                       ?? "Dashboard";
     }
 
     private void Navigate_Click(object sender, RoutedEventArgs e)
@@ -158,9 +264,83 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Import_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Import backup");
-    private void Export_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Export backup");
-    private void Find_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Find");
+    /// <summary>
+    /// A complete copy of the local database - jobs, clients, invoices,
+    /// bookings, parts, filament, rates and settings - in one file.
+    /// </summary>
+    private void Export_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export backup",
+            FileName = $"ZoltanStudios-backup-{DateTime.Now:yyyy-MM-dd}.zsbackup",
+            Filter = "Business Suite backup (*.zsbackup)|*.zsbackup|All files (*.*)|*.*",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        try
+        {
+            var info = BackupService.Export(dlg.FileName);
+            StatusText.Text = "Backup saved";
+            MessageBox.Show(this, $"Backup saved to\n{dlg.FileName}\n\n{info}", "Export backup",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The backup couldn't be written: " + ex.Message, "Export backup",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void Import_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import backup",
+            Filter = "Business Suite backup (*.zsbackup;*.db)|*.zsbackup;*.db|All files (*.*)|*.*",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        var check = BackupService.Inspect(dlg.FileName);
+        if (!check.Ok)
+        {
+            MessageBox.Show(this, check.Message, "Import backup", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (MessageBox.Show(this,
+                $"Replace everything in the suite with this backup?\n\n{check.Message}\n\n" +
+                "Your current data is copied aside first, so this can be undone by importing that copy.",
+                "Import backup", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var saved = BackupService.Import(dlg.FileName);
+            MessageBox.Show(this,
+                $"Backup restored. Your previous data was saved as\n{saved}\n\nThe suite will now restart.",
+                "Import backup", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (Environment.ProcessPath is { } exe) System.Diagnostics.Process.Start(exe);
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The backup couldn't be restored: " + ex.Message + "\n\nNothing was changed.",
+                "Import backup", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void Find_Click(object sender, RoutedEventArgs e) => Navigate("find");
+
+    public void NewBooking()
+    {
+        if (new AppointmentEditorWindow(null) { Owner = this }.ShowDialog() == true)
+        {
+            Navigate("calendar");
+            StatusText.Text = "Booking saved";
+        }
+    }
+
+    public void NewJob() => NewJob_Click(this, new RoutedEventArgs());
+    public void NewInvoice() => NewInvoice_Click(this, new RoutedEventArgs());
+    public void SyncNow() => SyncNow_Click(this, new RoutedEventArgs());
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -220,9 +400,14 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------ tools menu
 
-    private void TesterDefaults_Click(object sender, RoutedEventArgs e) => Navigate("settings");
-    private void Pricing_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Pricing");
-    private void Appliances_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Appliance library");
+    private void TesterDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        if (new TesterDefaultsWindow { Owner = this }.ShowDialog() == true)
+            StatusText.Text = "Tester defaults saved";
+    }
+
+    private void Pricing_Click(object sender, RoutedEventArgs e) => Navigate("pricing");
+    private void Appliances_Click(object sender, RoutedEventArgs e) => Navigate("appliances");
 
     // ------------------------------------------------------------ parts menu
 
@@ -249,24 +434,16 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------- help menu
 
-    private void Reference_Click(object sender, RoutedEventArgs e) => NotBuiltYet("AS/NZS 3760 reference");
-    private void WavecomGuide_Click(object sender, RoutedEventArgs e) => NotBuiltYet("Wavecom TnT guide");
+    private void Reference_Click(object sender, RoutedEventArgs e) => Navigate("guide.3760");
+    private void WavecomGuide_Click(object sender, RoutedEventArgs e) => Navigate("guide.wavecom");
 
     private void About_Click(object sender, RoutedEventArgs e)
         => MessageBox.Show(
-            "ZoltanStudios Business Suite\nVersion 0.2.0\n\n" +
-            "Test and tag compliance, clients, invoicing and scheduling.\n" +
+            "ZoltanStudios Business Suite\nVersion 0.3.0\n\n" +
+            "Test and tag, clients, projects, messages, quotes, invoicing, bookings and stock.\n" +
             "Works offline; syncs to zoltanstudios.au when connected.",
             "About", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    // ------------------------------------------------------------------ util
-
-    private void NotBuiltYet(string what)
-    {
-        StatusText.Text = what + " - not built yet";
-        MessageBox.Show(what + " hasn't been built yet.", "Coming soon",
-            MessageBoxButton.OK, MessageBoxImage.Information);
-    }
 }
 
 /// <summary>Minimal ICommand so keyboard shortcuts can call methods directly.</summary>

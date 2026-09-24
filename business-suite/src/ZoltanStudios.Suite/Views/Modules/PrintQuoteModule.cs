@@ -79,6 +79,7 @@ public sealed class PrintQuoteModule : ModuleBase
             Padding = new Thickness(18, 7, 18, 7),
             HorizontalAlignment = HorizontalAlignment.Left,
             Background = Ui.Res("AccentBrush"),
+            BorderBrush = Ui.Res("AccentBrush"),
             Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 4, 0, 16),
@@ -98,8 +99,10 @@ public sealed class PrintQuoteModule : ModuleBase
         actions.Children.Add(save);
         Body.Children.Add(actions);
 
-        _results.MaxWidth = 620;
-        Body.Children.Add(_results);
+        _results.Width = 620;
+        var resultsCard = Ui.Card(_results, 22, new Thickness(0, 8, 0, 16));
+        resultsCard.HorizontalAlignment = HorizontalAlignment.Left;
+        Body.Children.Add(resultsCard);
 
         // Recalculate as values change - a quote tool that needs a button
         // press to stay honest invites reading a stale number aloud.

@@ -15,7 +15,7 @@
     <Product>ZoltanStudios Business Suite</Product>
     <Company>ZoltanStudios</Company>
     <Copyright>ZoltanStudios</Copyright>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -23,6 +23,13 @@
     <!-- Local database. Everything is read and written locally so the app
          works with no connection; syncing to the cPanel API comes later. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <!-- Hosts the test and tag web app inside the suite (Edge's engine, already on Windows 10/11). -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Default appliance library: the same 212 appliances as the web app's quick-pick. -->
+    <EmbeddedResource Include="Resources\appliances.json" LogicalName="ZoltanStudios.Suite.appliances.json" />
   </ItemGroup>
 
   <ItemGroup>

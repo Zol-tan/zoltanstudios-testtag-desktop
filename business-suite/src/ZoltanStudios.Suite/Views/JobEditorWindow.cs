@@ -56,6 +56,7 @@ public sealed class JobEditorWindow : Window
             TesterName = Repository.GetSetting("TesterName", ""),
             TesterLicence = Repository.GetSetting("TesterLicence", ""),
             TestEquipment = Repository.GetSetting("TestEquipment", "Wavecom TnT RCD"),
+            CalibrationDate = Repository.GetSetting("CalibrationDate", ""),
             TagStart = last,
             Items = { new Item { TagNumber = last } },
         };
@@ -79,6 +80,7 @@ public sealed class JobEditorWindow : Window
         DockPanel.SetDock(buttons, Dock.Bottom);
 
         buttons.Children.Add(Button("Add Item", (_, _) => AddItem()));
+        buttons.Children.Add(Button("Add from Library…", (_, _) => AddFromLibrary()));
         buttons.Children.Add(Button("Duplicate Item", (_, _) => DuplicateItem()));
         buttons.Children.Add(Button("Remove Item", (_, _) => RemoveItem()));
         buttons.Children.Add(new Separator { Width = 16, Opacity = 0 });
@@ -143,6 +145,7 @@ public sealed class JobEditorWindow : Window
         if (primary)
         {
             b.Background = (Brush)Application.Current.Resources["AccentBrush"];
+            b.BorderBrush = b.Background;
             b.Foreground = Brushes.White;
             b.FontWeight = FontWeights.SemiBold;
         }
@@ -191,6 +194,8 @@ public sealed class JobEditorWindow : Window
         _grid.Columns.Add(Text("Tag", nameof(Item.TagNumber), 90));
         _grid.Columns.Add(Text("Description", nameof(Item.Description), 200));
         _grid.Columns.Add(Choice("Class", nameof(Item.EquipmentClass), new[] { "I", "II", "III" }, 60));
+        // Drives the invoice: standard, power tool, RCD or microwave pricing.
+        _grid.Columns.Add(Choice("Type", nameof(Item.ItemType), ApplianceLibrary.ItemTypes, 100));
         _grid.Columns.Add(Text("Location", nameof(Item.Location), 130));
         _grid.Columns.Add(Choice("Visual", nameof(Item.Visual), new[] { "pass", "fail" }, 72));
         _grid.Columns.Add(Text("Earth Ω", nameof(Item.EarthContinuity), 78));
@@ -304,6 +309,37 @@ public sealed class JobEditorWindow : Window
         });
         RefreshSummary();
     }
+
+    /// <summary>Adds the picked appliances as new items, continuing the tag numbers.</summary>
+    private void AddFromLibrary()
+    {
+        var dlg = new Modules.LibraryPickerWindow { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        // A new job opens with one blank row; replace it rather than leave it empty.
+        if (_items.Count == 1 && IsBlank(_items[0])) _items.RemoveAt(0);
+
+        var prev = _items.LastOrDefault();
+        foreach (var a in dlg.Picked)
+        {
+            _items.Add(new Item
+            {
+                TagNumber = NextTag(),
+                Description = a.Name,
+                EquipmentClass = a.EquipmentClass,
+                ItemType = a.ItemType,
+                Location = prev?.Location ?? "",
+                InsulationVoltage = prev?.InsulationVoltage ?? "500",
+            });
+        }
+        foreach (var it in _items) Grade(it);
+        _grid.Items.Refresh();
+        RefreshSummary();
+    }
+
+    private static bool IsBlank(Item i) =>
+        i.Description.Length == 0 && i.EarthContinuity.Length == 0 && i.InsulationResistance.Length == 0
+        && i.LeakageCurrent.Length == 0 && i.Location.Length == 0;
 
     private void DuplicateItem()
     {
