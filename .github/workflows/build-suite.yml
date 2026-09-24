@@ -1,0 +1,64 @@
+name: Build Business Suite
+
+on:
+  push:
+    tags:
+      - "suite-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# The suite lives in business-suite/ so it sits alongside the Tauri wrapper in
+# this repo without touching its files.
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: business-suite
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore src/ZoltanStudios.Suite/ZoltanStudios.Suite.csproj
+
+      - name: Build
+        run: dotnet build src/ZoltanStudios.Suite/ZoltanStudios.Suite.csproj -c Release --no-restore
+
+      # Self-contained and single-file, so the laptop needs no .NET install.
+      # Larger download, but it just runs — which matters for a business tool.
+      - name: Publish single-file executable
+        run: >
+          dotnet publish src/ZoltanStudios.Suite/ZoltanStudios.Suite.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish
+
+      - name: Show output
+        shell: pwsh
+        run: Get-ChildItem publish | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length/1MB) }
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZoltanStudios-Business-Suite
+          path: business-suite/publish/*.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/suite-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: business-suite/publish/*.exe
+          generate_release_notes: true
