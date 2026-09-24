@@ -327,7 +327,11 @@ function buildRecordHTML(job) {
         <td style="text-transform:uppercase">${escapeHtml(item.rcdTest)}</td>
         <td style="font-size:11px">${rcdTripSummary(item)}</td>
         <td>${resultBadgeHtml(item.overallResult)}</td>
-        <td>${escapeHtml(item.notes) || "&mdash;"}</td>
+        <td>${escapeHtml(item.notes) || "&mdash;"}${(function () {
+          // Internal record only - the client certificate doesn't list parts.
+          const p = item.partId && typeof partById === "function" ? partById(cachedParts(), item.partId) : null;
+          return p ? '<br/><span style="color:#1d4ed8;font-size:10px">&#128295; Part fitted: ' + escapeHtml(p.name) + '</span>' : "";
+        })()}</td>
       </tr>`).join("");
   const recordTagColour = getTagColour(job.testDate, job.retestMonths);
   const body = `

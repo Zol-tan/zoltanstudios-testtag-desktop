@@ -72,24 +72,22 @@ function retestLabel(job) {
 // ---------------------------------------------------------------------------
 // CSV asset register export
 // ---------------------------------------------------------------------------
-function csvCell(v) {
-  const s = v == null ? "" : String(v);
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
 
-function buildAssetRegisterCSV(jobs) {
+function buildAssetRegisterCSVForJobs(jobs) {
   const head = [
     "Certificate No", "Client", "Company", "Site Address", "Test Date", "Next Test Due",
     "Tag Number", "QR ID", "Description", "Make/Model", "Serial No", "Location",
     "Class", "Visual", "Polarity", "Earth (Ohm)", "Insulation (MOhm)", "Insul Test V",
     "Leakage (mA)", "RCD", "Operation", "Fuse", "Result", "Fault", "Repair", "Notes",
   ];
-  const rows = [head.map(csvCell).join(",")];
+  // Kept as arrays of cells until the end, so a column can be removed
+  // before anything is joined - removing it from joined text is error-prone.
+  const table = [head];
 
   jobs.forEach((job) => {
     const due = addMonths(job.testDate, job.retestMonths);
     (job.items || []).forEach((it) => {
-      rows.push([
+      table.push([
         job.certNumber, job.clientName, job.clientCompany, job.siteAddress,
         job.testDate, due,
         it.assetId, it.qrId, it.description, it.makeModel, it.serialNumber, it.location,
@@ -101,12 +99,16 @@ function buildAssetRegisterCSV(jobs) {
         it.operationTest && it.operationTest !== "n/a" ? it.operationTest : "",
         it.fuseCheck && it.fuseCheck !== "n/a" ? it.fuseCheck : "",
         it.overallResult, it.faultDescription, it.repairDetails, it.notes,
-      ].map(csvCell).join(","));
+      ]);
     });
   });
 
+  // No QR column while labels are off - a code that isn't on any tag would
+  // only confuse whoever reads the spreadsheet.
+  const qrCol = head.indexOf("QR ID");
+  const cells = QR_LABELS_ENABLED ? table : table.map(r => r.filter((_, i) => i !== qrCol));
   // BOM so Excel opens UTF-8 correctly
-  return "\ufeff" + rows.join("\r\n");
+  return "\ufeff" + cells.map(r => r.map(csvCell).join(",")).join("\r\n");
 }
 
 function downloadCSV(content, filename) {
@@ -159,6 +161,12 @@ function generateQrId() {
   }
   return id;
 }
+
+// QR labels are switched off until a label printer is in use. Every item
+// still gets its permanent QR ID in the background, so switching this back
+// on shows the same IDs on existing items - nothing to regenerate or re-tag.
+// The phone-capture QR code is unrelated and stays on regardless.
+const QR_LABELS_ENABLED = false;
 
 // Verify URL for a given QR ID
 const VERIFY_BASE_URL = "https://zoltanstudios.au/verify?id=";
@@ -766,6 +774,7 @@ const blankItem = () => ({
   // drives pricing category
   assetId: "",
   followUp: false,
+  partId: "",
   description: "",
   makeModel: "",
   serialNumber: "",

@@ -48,6 +48,22 @@ try {
 }
 fs.renameSync(tmp, outFile);
 
+// ---- duplicate function names -------------------------------------------
+// Two top-level functions with the same name don't error in JavaScript - the
+// later one silently replaces the earlier. That broke the ZIP export and
+// folder saving once (two buildAssetRegisterCSV functions taking different
+// arguments), so it fails the build now instead.
+const seen = {};
+const dupes = [];
+for (const m of bundle.matchAll(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)) {
+  if (seen[m[1]]) dupes.push(m[1]);
+  seen[m[1]] = true;
+}
+if (dupes.length) {
+  fs.unlinkSync(outFile);
+  fail("function defined more than once: " + [...new Set(dupes)].join(", "));
+}
+
 // ---- sanity checks --------------------------------------------------------
 // Cheap guards against a module being dropped or a rename going wrong.
 const required = [
@@ -57,7 +73,7 @@ const required = [
   "buildBackup", "restoreBackup", "pushJobToServer", "pullJobsFromServer",
   "startCaptureSession", "isDesktopShell",
   "emailDocumentToClient", "EmailCertButton",
-  "SignaturePad", "testerSignatureBlockHtml", "renderHtmlToPdf", "downloadJobPdf", "jobPdfBase64", "PdfButtons",
+  "SignaturePad", "testerSignatureBlockHtml", "renderHtmlToPdf", "fetchParts", "buildAssetRegisterCSVForJobs", "buildAssetRegisterCSV", "PartFittedSelect", "PartsView", "PartsSummaryCard", "partsTotalFor", "downloadJobPdf", "jobPdfBase64", "PdfButtons",
 ];
 const absent = required.filter((sym) => !bundle.includes(sym));
 if (absent.length) fail("expected symbols missing from bundle: " + absent.join(", "));

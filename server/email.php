@@ -151,24 +151,7 @@ switch (action()) {
             json_error(400, 'No document was supplied to send.');
         }
 
-        // Fingerprint the exact bytes the client receives, so the document
-        // can later be checked for tampering at /verify.html.
         $sha256 = hash('sha256', $attachment);
-        if ($certNo !== '') {
-            try {
-                db()->prepare('DELETE FROM testtag_verify WHERE cert_number = ?')->execute([strtoupper($certNo)]);
-                db()->prepare(
-                    'INSERT INTO testtag_verify
-                     (id, cert_number, sha256, client_name, site_address, test_date, next_due, issued_at)
-                     VALUES (?,?,?,?,?,?,?,?)'
-                )->execute([
-                    new_id(), strtoupper($certNo), $sha256,
-                    $client, $site, trim((string)($in['testDate'] ?? '')), $nextDue, now(),
-                ]);
-            } catch (Throwable $e) {
-                // Verification is a bonus - never block sending the certificate.
-            }
-        }
 
         if (strlen($attachment) > MAX_ATTACH_BYTES) {
             json_error(413, 'That document is too large to email. Try removing some photos.');
@@ -180,6 +163,29 @@ switch (action()) {
         $site    = trim((string)($in['siteAddress'] ?? ''));
         $nextDue = trim((string)($in['nextTestDue'] ?? ''));
         $note    = trim((string)($in['message'] ?? ''));
+
+        // Record the fingerprint so the document can be checked at
+        // /verify.html. This must come after $certNo and friends are read.
+        if ($certNo !== '') {
+            try {
+                db()->prepare('DELETE FROM testtag_verify WHERE cert_number = ?')
+                    ->execute([strtoupper($certNo)]);
+                db()->prepare(
+                    'INSERT INTO testtag_verify
+                     (id, cert_number, sha256, client_name, site_address, test_date, next_due, issued_at)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([
+                    new_id(), strtoupper($certNo), $sha256,
+                    $client, $site, trim((string)($in['testDate'] ?? '')), $nextDue, now(),
+                ]);
+                $verifyStored = true;
+            } catch (Throwable $e) {
+                // Don't block the certificate going out, but do report it so a
+                // silent failure can't hide like this again.
+                $verifyStored = false;
+                $verifyError = $e->getMessage();
+            }
+        }
 
         $labels = [
             'certificate' => 'Test and Tag Compliance Certificate',
@@ -242,7 +248,14 @@ switch (action()) {
             json_error(500, 'The server could not send that email. Check the mail settings in cPanel.');
         }
 
-        json_ok(['to' => $to, 'subject' => $subject, 'filename' => $filename, 'sha256' => $sha256]);
+        json_ok([
+            'to' => $to,
+            'subject' => $subject,
+            'filename' => $filename,
+            'sha256' => $sha256,
+            'verifyStored' => isset($verifyStored) ? $verifyStored : false,
+            'verifyError' => isset($verifyError) ? $verifyError : null,
+        ]);
         break;
     }
 

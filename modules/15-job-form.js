@@ -12,6 +12,8 @@ function JobFormView({
   folderName
 }) {
   const [job, setJob] = useState(initialJob);
+  // Repair parts - shared with the desktop app via the server.
+  const partsCat = usePartsCatalogue();
   const [saving, setSaving] = useState(false);
   const [showQuickRef, setShowQuickRef] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
@@ -526,7 +528,7 @@ function JobFormView({
       _expanded: !item._expanded
     }),
     className: "w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:bg-slate-100",
-    title: "Show/hide extra fields (make, model, serial, QR ID, location, type)"
+    title: "Show/hide extra fields (make, model, serial, location, type, part fitted)"
   }, item._expanded ? "▾" : "▸"), (function () {
   return React.createElement('button', {
     type: 'button',
@@ -684,7 +686,7 @@ function JobFormView({
     className: "py-3 px-2"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, QR_LABELS_ENABLED && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "font-semibold text-slate-500 uppercase tracking-wide mb-1"
   }, "QR ID"), /*#__PURE__*/React.createElement("div", {
     className: "font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-center"
@@ -733,7 +735,12 @@ function JobFormView({
     onChange: e => updateItem(item.id, {
       leakageCurrent: e.target.value
     })
-  }))))), item.rcdTripTestEnabled && /*#__PURE__*/React.createElement("tr", {
+  })), /*#__PURE__*/React.createElement(PartFittedSelect, {
+    item: item,
+    parts: partsCat,
+    inputCls: inputCls,
+    onChange: partId => updateItem(item.id, { partId: partId })
+  })))), item.rcdTripTestEnabled && /*#__PURE__*/React.createElement("tr", {
     className: "border-b border-slate-100 bg-blue-50/50"
   }, /*#__PURE__*/React.createElement("td", {
     colSpan: 10,
@@ -825,17 +832,17 @@ function JobFormView({
     job.items.forEach(i => {
       counts[i.itemType || "standard"] = (counts[i.itemType || "standard"] || 0) + 1;
     });
-    const RATES = {
-      standard: 3.50,
-      power_tool: 5.00,
-      rcd: 8.00,
-      microwave: 12.00
-    };
-    const itemTotal = Object.entries(counts).reduce((sum, [type, n]) => sum + (RATES[type] || 3.50) * n, 0);
     const totalItems = job.items.length;
+    // Volume tiers replace the standard rate outright, and the call-out
+    // covers the first 20 standard items - matching the published pricing
+    // and the desktop invoice, so the two can't disagree.
     const volumeRate = totalItems >= 200 ? 2.50 : totalItems >= 100 ? 2.90 : 3.50;
     const callOut = 120;
-    const estimatedTotal = callOut + itemTotal;
+    const chargeableStd = Math.max(0, counts.standard - 20);
+    const partsTotal = partsTotalFor(job.items, partsCat);
+    const partsCount = job.items.filter(i => { const p = partById(partsCat, i.partId); return p && !p.consumable; }).length;
+    const itemTotal = chargeableStd * volumeRate + counts.power_tool * 5.00 + counts.rcd * 8.00 + counts.microwave * 12.00;
+    const estimatedTotal = callOut + itemTotal + partsTotal;
     return /*#__PURE__*/React.createElement("div", {
       className: "bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm"
     }, /*#__PURE__*/React.createElement("div", {
@@ -844,11 +851,11 @@ function JobFormView({
       className: "font-semibold text-slate-700"
     }, "Estimated invoice"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-4 flex-wrap text-slate-600 text-xs"
-    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$120")), counts.standard > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", counts.standard, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.standard * 3.50).toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * 5.00).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * 8.00).toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * 12.00).toFixed(2))), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$120")), chargeableStd > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", chargeableStd, " after first 20: ", /*#__PURE__*/React.createElement("strong", null, "$", (chargeableStd * volumeRate).toFixed(2))), partsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Parts ×", partsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", partsTotal.toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * 5.00).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * 8.00).toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * 12.00).toFixed(2))), /*#__PURE__*/React.createElement("span", {
       className: "font-bold text-blue-700"
     }, "Total: $", estimatedTotal.toFixed(2)))), totalItems >= 100 && /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-amber-600 mt-1"
-    }, "⚠ Volume tier applies for standard items (", totalItems >= 200 ? "$2.50" : "$2.90", "/item for ", totalItems >= 200 ? "200+" : "100–199", " items) — adjust pricing manually as needed."));
+    }, "⚠ Volume tier applies for standard items (", totalItems >= 200 ? "$2.50" : "$2.90", "/item for ", totalItems >= 200 ? "200+" : "100–199", " items) applied."));
   })(), folderStatus === "connected" && /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-emerald-600 text-right mb-2"
   }, /*#__PURE__*/React.createElement(CheckCircle2, {
@@ -856,7 +863,7 @@ function JobFormView({
     className: "inline mr-1"
   }), "Saving will also write straight to ", /*#__PURE__*/React.createElement("strong", null, folderName), "."), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col sm:flex-row gap-3 sm:justify-end"
-  }, /*#__PURE__*/React.createElement("button", {
+  }, QR_LABELS_ENABLED && /*#__PURE__*/React.createElement("button", {
     onClick: () => printQrLabels(job),
     className: "inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-5 py-2.5 rounded-lg transition-colors",
     title: "Print A4 QR label sheet for all items in this job"

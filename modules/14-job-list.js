@@ -15,7 +15,8 @@ function JobListView({
   onReconnectFolder,
   onDisconnectFolder,
   onRefreshFolder,
-  certRegistry
+  certRegistry,
+  onOpenParts
 }) {
   const [query, setQuery] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -207,7 +208,9 @@ function JobListView({
   }, "Refresh from folder"), /*#__PURE__*/React.createElement("button", {
     onClick: onDisconnectFolder,
     className: "text-xs text-emerald-700 underline hover:no-underline whitespace-nowrap"
-  }, "Disconnect"))), /*#__PURE__*/React.createElement("div", {
+  }, "Disconnect"))), onOpenParts && /*#__PURE__*/React.createElement(PartsSummaryCard, {
+    onOpen: onOpenParts
+  }), /*#__PURE__*/React.createElement("div", {
     className: "relative mb-4"
   }, /*#__PURE__*/React.createElement(Search, {
     size: 16,
@@ -239,7 +242,7 @@ function JobListView({
   }, dueCounts.upcoming, " due in 2–4 months"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: function () {
-      downloadCSV(buildAssetRegisterCSV(filtered), 'asset-register-' + new Date().toISOString().slice(0, 10) + '.csv');
+      downloadCSV(buildAssetRegisterCSVForJobs(filtered), 'asset-register-' + new Date().toISOString().slice(0, 10) + '.csv');
     },
     disabled: filtered.length === 0,
     className: "ml-auto text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-colors",

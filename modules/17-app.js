@@ -298,7 +298,10 @@ function TestTagRecordsApp() {
     onReconnectFolder: handleReconnectFolder,
     onDisconnectFolder: handleDisconnectFolder,
     onRefreshFolder: handleRefreshFromFolder,
-    certRegistry: certRegistry
+    certRegistry: certRegistry,
+    onOpenParts: () => setView("parts")
+  }), view === "parts" && /*#__PURE__*/React.createElement(PartsView, {
+    onBack: () => setView("list")
   }), view === "form" && activeJob && /*#__PURE__*/React.createElement(JobFormView, {
     job: activeJob,
     onCancel: () => setView("list"),

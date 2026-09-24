@@ -70,7 +70,8 @@ function jobToServerPayload(job) {
       rcdMeasuredTripCurrentMa: it.rcdMeasuredTripCurrentMa || "",
       overallResult: it.overallResult || "pass",
       overrideResult: !!it.overrideResult,
-      notes: it.notes || ""
+      notes: it.notes || "",
+      partId: it.partId || ""
     }))
   };
 }
@@ -124,7 +125,8 @@ function serverJobToLocal(j) {
       rcdMeasuredTripCurrentMa: it.rcdMeasuredTripCurrentMa || "",
       overallResult: it.overallResult || "pass",
       overrideResult: !!it.overrideResult,
-      notes: it.notes || ""
+      notes: it.notes || "",
+      partId: it.partId || ""
     }))
   };
 }
