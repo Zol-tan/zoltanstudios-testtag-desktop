@@ -144,9 +144,10 @@ public sealed class SyncService
         if (op == "delete" || job.Deleted)
         {
             if (op != "delete") return Outcome.Done;               // deleted before it was ever sent
-            if (string.IsNullOrEmpty(job.ServerId)) return Outcome.Done;
+            // Sent even without a server id: the server also finds jobs by
+            // externalId (e.g. pushed from here, linked by the next pull).
             var del = await _api.CallPostAsync("api/services.php?resource=testtag&action=delete",
-                new { id = job.ServerId }, ct);
+                new { id = job.ServerId ?? "", externalId = job.Id }, ct);
             return Outcome.From(del);
         }
 
@@ -174,6 +175,7 @@ public sealed class SyncService
                 testerName = job.TesterName,
                 testerLicense = job.TesterLicence,
                 status = job.Status,
+                jobType = job.JobType,
                 source = "desktop",
                 items = job.Items.Select(i => new
                 {
@@ -413,6 +415,8 @@ public sealed class SyncService
                 ["id"] = p.Id, ["sku"] = p.Sku, ["name"] = p.Name, ["cost"] = p.Cost,
                 ["sell"] = p.Sell, ["lowAt"] = p.LowAt, ["active"] = p.Active,
                 ["consumable"] = p.Consumable,
+                ["supplier"] = p.Supplier,
+                ["url"] = p.Url,
             };
             // Only a restock sends the count - see Part.StockDirty.
             if (p.StockDirty) body["onHand"] = p.OnHand;
@@ -434,6 +438,8 @@ public sealed class SyncService
         LowAt = (int)Json.Num(e, "lowAt"),
         Active = Json.Bool(e, "active"),
         Consumable = Json.Bool(e, "consumable"),
+        Supplier = Json.Str(e, "supplier"),
+        Url = Json.Str(e, "url"),
     };
 
     // ------------------------------------------------------------------ pull
@@ -455,6 +461,7 @@ public sealed class SyncService
         var jobs = await _api.CallGetAsync("api/services.php?resource=testtag&action=pull", ct);
         foreach (var j in jobs.Rows())
             if (MergeJob(j)) pulled++;
+        if (jobs.Ok) RemoveDeletedJobs(jobs);
 
         var invoices = await _api.CallGetAsync("api/data.php?resource=invoices&action=list", ct);
         foreach (var i in invoices.Rows())
@@ -485,6 +492,35 @@ public sealed class SyncService
         foreach (var (id, serverId) in local)
             if (!string.IsNullOrEmpty(serverId) && !onServer.Contains(serverId) && !Repository.HasPending(table, id))
                 Repository.MarkDeletedQuiet(table, id);
+    }
+
+    /// <summary>
+    /// Drops jobs deleted on the website or from another device: those in the
+    /// server's tombstone list, and linked ones no longer in its job list.
+    /// A job never sent to the server, or with a change waiting to go up, stays.
+    /// </summary>
+    private static void RemoveDeletedJobs(ApiResult server)
+    {
+        var tomb = new HashSet<string>();
+        if (server.Root.ValueKind == JsonValueKind.Object
+            && server.Root.TryGetProperty("deleted", out var del) && del.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var d in del.EnumerateArray())
+            {
+                if (Json.Str(d, "id") is { Length: > 0 } a) tomb.Add(a);
+                if (Json.Str(d, "externalId") is { Length: > 0 } b) tomb.Add(b);
+            }
+        }
+        var live = server.Rows().Select(r => Json.Str(r, "id")).ToHashSet();
+        var liveExt = server.Rows().Select(r => Json.Str(r, "externalId")).Where(x => x.Length > 0).ToHashSet();
+
+        foreach (var j in Repository.GetJobs())
+        {
+            if (Repository.HasPending("Jobs", j.Id)) continue;
+            if (live.Contains(j.ServerId ?? "") || liveExt.Contains(j.Id)) continue;
+            var gone = tomb.Contains(j.Id) || (!string.IsNullOrEmpty(j.ServerId) && (tomb.Contains(j.ServerId) || !live.Contains(j.ServerId)));
+            if (gone) Repository.MarkDeletedQuiet("Jobs", j.Id);
+        }
     }
 
     private static bool MergeClient(JsonElement u)
@@ -592,9 +628,13 @@ public sealed class SyncService
 
         if (existing is not null)
         {
-            if (existing.Deleted || Repository.HasPending("Jobs", existing.Id)) return false;
+            if (Repository.HasPending("Jobs", existing.Id)) return false;
             var serverStamp = ToLocalStamp(Json.Str(j, "lastUpdated"));
-            if (string.CompareOrdinal(existing.UpdatedAt, serverStamp) >= 0)
+            // Removed here because it was deleted elsewhere, but it's back on
+            // the server (pushed again): bring it back. (A delete made here
+            // is still queued, so it was skipped just above.)
+            if (existing.Deleted) { }
+            else if (string.CompareOrdinal(existing.UpdatedAt, serverStamp) >= 0)
             {
                 if (string.IsNullOrEmpty(existing.ServerId))
                     Repository.SetJobServerInfo(existing.Id, serverId, "", "");
@@ -605,7 +645,7 @@ public sealed class SyncService
         // A job created on the website has no externalId; use its server id.
         var job = existing is null
             ? new Job { Id = externalId.Length > 0 ? externalId : serverId }
-            : Repository.GetJob(existing.Id)!;
+            : WithItems(existing);
 
         job.ServerId = serverId;
         job.CertNumber = Json.Str(j, "certNumber");
@@ -616,6 +656,7 @@ public sealed class SyncService
         job.TesterName = Json.Str(j, "testerName");
         job.TesterLicence = Json.Str(j, "testerLicense");
         job.Status = Json.Str(j, "status", "draft");
+        job.JobType = Json.Str(j, "jobType", job.JobType.Length > 0 ? job.JobType : "test_tag");
         job.RetestMonths = (int)Json.Num(j, "retestMonths", 12);
 
         if (j.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
@@ -657,6 +698,12 @@ public sealed class SyncService
     }
 
     // ------------------------------------------------------------------ util
+
+    private static Job WithItems(Job j)
+    {
+        j.Items = Repository.GetItems(j.Id);
+        return j;
+    }
 
     /// <summary>
     /// The server's ISO timestamp ("2026-09-25T01:02:03+00:00") in the local

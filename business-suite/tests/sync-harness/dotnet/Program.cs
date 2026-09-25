@@ -361,6 +361,113 @@ using (var h = new HttpClient())
     Check((int)res.StatusCode == 401, "revoked token no longer works");
 }
 
+Console.WriteLine("== deleting jobs from any device");
+// A tester-app job pushed with a token (no session), like the phone does.
+var devToken = (await api.CallPostAsync("api/services.php?resource=tokens&action=create", new { label = "Phone" })).Str("token");
+async Task<(int Status, JsonElement Json)> TokenCall(string path, object? body = null)
+{
+    using var h = new HttpClient();
+    h.DefaultRequestHeaders.Add("Authorization", "Bearer " + devToken);
+    var res = body is null
+        ? await h.GetAsync(baseUrl + "/" + path)
+        : await h.PostAsync(baseUrl + "/" + path, new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"));
+    var text = await res.Content.ReadAsStringAsync();
+    return ((int)res.StatusCode, JsonDocument.Parse(text).RootElement.Clone());
+}
+var phoneJob = new { id = "phone-job-0001", externalId = "phone-job-0001", siteAddress = "Phone Site", testDate = "2026-09-24",
+    items = new[] { new { description = "Drill", overallResult = "pass" } } };
+var pushed = await TokenCall("api/services.php?resource=testtag&action=push", new { job = phoneJob });
+Check(pushed.Status == 200, "phone pushes a job with its token");
+await Sync();
+var phoneLocal = Repository.GetJobs().FirstOrDefault(j => j.Id == "phone-job-0001");
+Check(phoneLocal is not null, "the suite pulls the phone's job");
+
+// The phone deletes it (token, by its own id - it may not know the server id).
+var tdel = await TokenCall("api/services.php?resource=testtag&action=delete", new { externalId = "phone-job-0001" });
+Check(tdel.Status == 200 && tdel.Json.GetProperty("data").GetProperty("deleted").GetBoolean(), "the phone can delete with its token (by externalId)");
+Check(N("SELECT COUNT(*) FROM tt_jobs WHERE external_id='phone-job-0001'") == 0, "job gone from the server");
+var pullAfter = await TokenCall("api/services.php?resource=testtag&action=pull");
+Check(pullAfter.Json.GetProperty("deleted").EnumerateArray().Any(d => Json.Str(d, "externalId") == "phone-job-0001"),
+    "pull tells every device it was deleted");
+await Sync();
+Check(!Repository.GetJobs().Any(j => j.Id == "phone-job-0001"), "the suite drops a job deleted on another device");
+
+// Deleting it again (e.g. a second device) is fine.
+var again = await TokenCall("api/services.php?resource=testtag&action=delete", new { externalId = "phone-job-0001" });
+Check(again.Status == 200 && again.Json.GetProperty("data").GetProperty("alreadyGone").GetBoolean(), "deleting something already gone succeeds");
+
+// A bad token can't delete.
+var savedTok = devToken; devToken = "zst_not_a_real_token";
+var badTok = await TokenCall("api/services.php?resource=testtag&action=delete", new { externalId = "x" });
+Check(badTok.Status == 401, "an invalid token can't delete");
+devToken = savedTok;
+
+// Deleted in the admin panel (session) -> gone from the suite.
+var adminVictim = Repository.GetJobs().First(j => !string.IsNullOrEmpty(j.ServerId));
+var ad = await api.CallPostAsync("api/services.php?resource=testtag&action=delete", new { id = adminVictim.ServerId });
+Check(ad.Ok, "admin panel delete still works (session)", ad.Error);
+await Sync();
+Check(!Repository.GetJobs().Any(j => j.Id == adminVictim.Id), "the suite drops a job deleted in the admin panel");
+
+// Re-pushed after a delete: alive again, tombstone cleared.
+await TokenCall("api/services.php?resource=testtag&action=push", new { job = phoneJob });
+var pullRevived = await TokenCall("api/services.php?resource=testtag&action=pull");
+Check(!pullRevived.Json.GetProperty("deleted").EnumerateArray().Any(d => Json.Str(d, "externalId") == "phone-job-0001")
+      && pullRevived.Json.GetProperty("data").EnumerateArray().Any(j => Json.Str(j, "externalId") == "phone-job-0001"),
+    "a job pushed again after deletion is live again (tombstone cleared)");
+await Sync();
+Check(Repository.GetJobs().Any(j => j.Id == "phone-job-0001"), "and the suite picks it back up");
+
+// Deleted in the suite -> gone on the server, even before it was linked.
+var suiteOnly = new Job { SiteAddress = "Suite delete test", TestDate = "2026-09-25", Items = { new Item { TagNumber = "T-900", Description = "Fan" } } };
+Repository.SaveJob(suiteOnly);
+await Sync();
+Repository.DeleteJob(suiteOnly.Id);
+await Sync();
+Check(N("SELECT COUNT(*) FROM tt_jobs WHERE external_id=$1", suiteOnly.Id) == 0, "deleting in the suite deletes the server copy");
+
+Console.WriteLine("== generator jobs, photos and signatures survive");
+var genJob = new
+{
+    id = "gen-job-0001", externalId = "gen-job-0001", jobType = "generator_inspection", siteAddress = "Gen Site", testDate = "2026-09-24",
+    generator = new { make = "Honda", model = "EU22i", kva = "2.2" },
+    attachments = new object[] { new { kind = "signature", dataUrl = "data:image/png;base64,AAAA", name = "Client" }, new { kind = "photo", dataUrl = "data:image/jpeg;base64,BBBB", note = "Nameplate" } },
+    meggerEquipment = "Megger MIT400", meggerCalibrationDate = "2026-01-10",
+    items = new[] { new { description = "Generator", overallResult = "pass" } },
+};
+Check((await TokenCall("api/services.php?resource=testtag&action=push", new { job = genJob })).Status == 200, "phone pushes a generator report with photos and a signature");
+await Sync();
+var genLocal = Repository.GetJobs().FirstOrDefault(j => j.Id == "gen-job-0001");
+Check(genLocal is { JobType: "generator_inspection" }, "the suite knows it's a generator inspection", genLocal?.JobType ?? "missing");
+var gj = Repository.GetJob(genLocal!.Id)!; gj.SiteAddress = "Gen Site (edited in suite)"; Repository.SaveJob(gj);
+await Sync();
+var genPull = await TokenCall("api/services.php?resource=testtag&action=pull");
+var gp = genPull.Json.GetProperty("data").EnumerateArray().First(j => Json.Str(j, "externalId") == "gen-job-0001");
+Check(Json.Str(gp, "siteAddress") == "Gen Site (edited in suite)", "the suite's edit reached the server");
+Check(Json.Str(gp, "jobType") == "generator_inspection" && gp.GetProperty("generator").GetProperty("make").GetString() == "Honda",
+    "job type and generator details kept after the suite's edit");
+Check(gp.GetProperty("attachments").GetArrayLength() == 2 && Json.Str(gp, "meggerEquipment") == "Megger MIT400",
+    "photos, signature and insulation tester kept after the suite's edit");
+
+Console.WriteLine("== parts: shop and link");
+var partsRes = await api.CallGetAsync("api/parts.php?action=list");
+var firstPart = PartsCatalogue.All().First();
+firstPart.Supplier = "Jaycar"; firstPart.Url = "https://www.jaycar.com.au/240v-line-mains-power-plug/p/PP4000"; firstPart.Sku = "PP4000"; firstPart.CatalogueDirty = true;
+PartsCatalogue.Save(firstPart);
+await Sync();
+var pl = (await api.CallGetAsync("api/parts.php?action=list")).Rows().First(p => Json.Str(p, "id") == firstPart.Id);
+Check(Json.Str(pl, "supplier") == "Jaycar" && Json.Str(pl, "url").Contains("PP4000"), "part's shop and link reach the server");
+// The web app saves parts without these fields; they must survive.
+await TokenCall("api/parts.php?action=save", new { id = firstPart.Id, sku = "PP4000", name = firstPart.Name + " (web edit)", cost = 5.10 });
+await Sync();
+var afterWeb = PartsCatalogue.All().First(p => p.Id == firstPart.Id);
+Check(afterWeb.Supplier == "Jaycar" && afterWeb.Url.Contains("PP4000") && afterWeb.Name.EndsWith("(web edit)"), "a web-app edit doesn't wipe the shop or link");
+var badUrl = await TokenCall("api/parts.php?action=save", new { name = "x", url = "javascript:alert(1)" });
+Check(badUrl.Status == 400, "only web links are accepted as a product link");
+Check(PartsCatalogue.All().Where(p => p.Sku.Length == 7 && p.Supplier.Length == 0).All(p => p.SupplierOrGuess == "Bunnings"), "old parts with a Bunnings I/N count as Bunnings");
+var restock = PartsCatalogue.RestockText(PartsCatalogue.All());
+Check(restock.Contains("\nBunnings\n") && restock.Contains("\nJaycar\n"), "restock list is grouped by shop");
+
 Console.WriteLine("== session expiry");
 // Lose the CSRF token server-side: the client should refresh and retry (419 path).
 foreach (var f in Directory.GetFiles(sessionsDir))
@@ -379,6 +486,58 @@ var syncOut = await sync.SyncAsync();
 Check(!syncOut.Ok && syncOut.Message.Contains("Not signed in"), "sync while signed out says so", syncOut.Message);
 
 // ============================================================ local features
+Console.WriteLine("== job rules");
+Job J(string id, string client, string site, string date) => new() { Id = id, ClientId = client, SiteAddress = site, TestDate = date };
+var rj = JobRules.CurrentForRetest(new[]
+{
+    J("a", "c1", "1 Test St", "2025-01-10"), J("b", "c1", "1 TEST ST.", "2026-01-12"),   // same site, retested
+    J("c", "c2", "5 Other Rd", "2025-03-01"),                                        // only visit
+    J("d", "", "", "2024-01-01"),                                                    // no client or site: kept
+});
+Check(rj.Select(x => x.Id).OrderBy(x => x).SequenceEqual(new[] { "b", "c", "d" }), "a site retested since is no longer due (only its latest job counts)",
+    string.Join(",", rj.Select(x => x.Id)));
+Check(JobRules.NextTagAfter("T-001", new[] { "T-001", "T-002", "T-007" }) == "T-008", "next tag follows the highest used");
+Check(JobRules.NextTagAfter("A0098", new[] { "A0099" }) == "A0100", "tag numbers keep their width");
+Check(JobRules.LaterTag("T-050", "T-008") == "T-050", "saving an old job doesn't wind the roll back");
+Check(JobRules.LaterTag("T-050", "T-051") == "T-051" && JobRules.LaterTag("T-050", "R-001") == "R-001", "roll moves on (or to a new roll)");
+var testRates = new Rates();
+var billJob = new Job { SiteAddress = "Bill St", Items =
+{
+    new Item { ItemType = "standard", PartId = firstPart.Id }, new Item { ItemType = "standard", PartId = firstPart.Id },
+    new Item { ItemType = "power_tool" }, new Item { ItemType = "rcd" },
+} };
+var bl = JobRules.InvoiceLinesFor(billJob, testRates, PartsCatalogue.All(includeInactive: true), new());
+Check(bl.Any(l => l.Description.StartsWith("Repair part fitted") && l.Quantity == 2), "parts fitted in the web app are billed from the job's items",
+    string.Join(" | ", bl.Select(l => $"{l.Description} x{l.Quantity}")));
+Check(bl[0].Rate == 120 && bl.Any(l => l.Description.StartsWith("Power tools") && l.Rate == 5) && bl.Any(l => l.Description.StartsWith("RCD") && l.Rate == 8),
+    "call-out, power tool and RCD rates applied");
+
+Console.WriteLine("== stock when a part is fitted");
+{
+    var stockPart = PartsCatalogue.All().First(p => !p.Consumable);
+    stockPart.OnHand = 1; PartsCatalogue.Save(stockPart);
+    PartsCatalogue.RecordUse("stock-job-1", "item-a", stockPart.Id, 3);
+    Check(PartsCatalogue.All().First(p => p.Id == stockPart.Id).OnHand == 0, "fitting 3 with 1 on hand leaves 0", "");
+    Check(PartsCatalogue.UsedOn("stock-job-1").Sum(u => u.Quantity) == 3, "all 3 are still billed", "");
+    PartsCatalogue.ClearUsageFor("stock-job-1");
+    var after = PartsCatalogue.All().First(p => p.Id == stockPart.Id).OnHand;
+    Check(after == 1, "re-saving the job gives back only the 1 actually taken (no phantom stock)", after.ToString());
+    stockPart = PartsCatalogue.All().First(p => p.Id == stockPart.Id); stockPart.OnHand = 5; PartsCatalogue.Save(stockPart);
+    PartsCatalogue.RecordUse("stock-job-2", "item-b", stockPart.Id, 2);
+    PartsCatalogue.ClearUsageFor("stock-job-2");
+    after = PartsCatalogue.All().First(p => p.Id == stockPart.Id).OnHand;
+    Check(after == 5, "normal fit and undo returns the count to where it was", after.ToString());
+}
+
+Console.WriteLine("== supplier pages");
+var pi = Suppliers.Parse("\"{\\\"name\\\":\\\"DETA 10A White Plug Top\\\",\\\"sku\\\":\\\"4430411\\\",\\\"price\\\":\\\"3.78\\\",\\\"url\\\":\\\"https://www.bunnings.com.au/deta-10a-white-plug-top_p4430411\\\",\\\"isProduct\\\":true,\\\"priceGuessed\\\":false}\"");
+Check(pi is { Name: "DETA 10A White Plug Top", Sku: "4430411", Price: 3.78, IsProduct: true, Supplier: "Bunnings" }, "reads what the page script returns (the real Bunnings result)",
+    System.Text.Json.JsonSerializer.Serialize(pi));
+Check(Suppliers.Parse("null") is null && Suppliers.Parse("garbage") is null, "bad results are ignored");
+Check(Suppliers.SearchUrl("Jaycar", "mains plug") == "https://www.jaycar.com.au/search?q=mains%20plug"
+      && Suppliers.SearchUrl("Bunnings", "4430411") == "https://www.bunnings.com.au/search/products?q=4430411", "search links for each shop");
+Check(Suppliers.ShopFor("https://www.jaycar.com.au/x/p/PP4000") == "Jaycar" && Suppliers.ShopFor("https://evil.example/bunnings.com.au") == "", "works out the shop from a link");
+
 Console.WriteLine("== find");
 var hits = SearchService.Search("kettle");
 Check(hits.Any(h => h.Kind == "Item" && h.Title.Contains("Kettle") && h.JobId == job.Id), "finds a tested item by description, pointing at its job");

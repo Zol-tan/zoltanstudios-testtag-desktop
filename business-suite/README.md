@@ -14,7 +14,7 @@ native app — the whole admin panel (`admin.html`, `admin-tools.html`) plus the
 tools and calculators. Public customer-facing pages (home, services, blog,
 client portal, certificate lookup) stay on the website.
 
-## Status — version 0.3.0
+## Status — version 0.4.0
 
 | Admin panel feature | Endpoint(s) | Suite |
 |---|---|---|
@@ -37,6 +37,8 @@ client portal, certificate lookup) stay on the website.
 | Filament stock | local (spools, use log, low stock) | Done — 0.3 |
 | Retest reminder emails | opens your mail program from Retest Due | Done — 0.3 |
 | AS/NZS 3760 reference, Wavecom TnT guide | Help pages | Done — 0.3 |
+| **Find Parts Online** (Bunnings, Jaycar, Altronics in a built-in browser) | reads the product page's own schema.org data | Done — 0.4 |
+| Parts: shop, item no. and product link per part; Check My Prices; restock list by shop | `parts.php` save/list (`supplier`, `url`) | Done — 0.4 |
 
 "Local + sync" sections work offline and sync on F5. "Live" sections read and
 write the server directly, like the admin panel does, and need a connection.
@@ -46,6 +48,24 @@ write the server directly, like the admin panel does, and need a connection.
 `projects/remove_member`. Against an older `data.php` the suite still works,
 but client edits and booking edits (other than status) wait in the queue with
 a message saying so, and project access can add but not list members.
+
+## Find Parts Online (0.4)
+
+There's no public API for Bunnings, Jaycar or Altronics, so the suite opens
+their normal website in a built-in browser (profile
+`%LocalAppData%\ZoltanStudios\WebView2-Shops`) and reads the product details
+the page publishes for search engines (schema.org Product JSON-LD: name, item
+number, price). Checked against live Bunnings and Jaycar product pages;
+Altronics falls back to the page's meta tags, and a price read off the page
+text is flagged as a guess for you to confirm.
+
+- **Search** any shop, open a product, then **Add as a New Part**, **Update My
+  Part From This Page**, or **Link to an Existing Part**.
+- **Check My Prices** visits every part that has a link (or searches by item
+  number) and lists old cost vs. new cost with Apply ticked; optionally
+  reprices the sell price from your markup.
+- Parts have a shop, item number and product link; the Restock List is
+  grouped by shop with "buy N" quantities and opens the product page.
 
 ## Building
 
@@ -70,7 +90,8 @@ you can only run it on Windows.
 files, swaps only `config.php` and the MySQL connection for SQLite, serves
 them with `php -S`, and drives them with the suite's own `Services` code:
 sign-in, every sync path (clients, jobs, invoices, bookings, deletes both
-ways) and every live admin call. Needs PHP with pdo_sqlite and the .NET 8 SDK.
+ways) and every live admin call, plus the local rules (retests, tag roll,
+invoicing, stock, supplier pages, backup) — 154 checks. Needs PHP with pdo_sqlite and the .NET 8 SDK.
 Add `--old-server` (with `OLD_DATA_PHP=` pointing at a previous data.php) to
 check the fallbacks for a server that hasn't been updated.
 
@@ -137,6 +158,4 @@ tests/sync-harness/          End-to-end test against the real PHP
   condition, polarity, operation and fuse checks, fault and repair text,
   removed-from-service and follow-up stay in the suite only (kept through
   syncs where the item still matches by position and tag).
-- The server has no job type, so a generator inspection arrives on the
-  website as an ordinary job record.
 - Booking location is suite-only (events have no location column).

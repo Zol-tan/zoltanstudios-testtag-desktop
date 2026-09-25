@@ -52,7 +52,7 @@ public sealed class JobEditorWindow : Window
         var last = Repository.GetSetting("LastTagStart", "T-001");
         return new Job
         {
-            CertNumber = "ZS" + Random.Shared.Next(100000, 999999),
+            CertNumber = NewCertNumber(),
             TesterName = Repository.GetSetting("TesterName", ""),
             TesterLicence = Repository.GetSetting("TesterLicence", ""),
             TestEquipment = Repository.GetSetting("TestEquipment", "Wavecom TnT RCD"),
@@ -60,6 +60,15 @@ public sealed class JobEditorWindow : Window
             TagStart = last,
             Items = { new Item { TagNumber = last } },
         };
+    }
+
+    /// <summary>A certificate number not already used by a job on this PC.</summary>
+    private static string NewCertNumber()
+    {
+        var used = Repository.GetJobs(includeDeleted: true).Select(j => j.CertNumber).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string n;
+        do n = "ZS" + Random.Shared.Next(100000, 999999); while (used.Contains(n));
+        return n;
     }
 
     // ------------------------------------------------------------------ layout
@@ -285,7 +294,8 @@ public sealed class JobEditorWindow : Window
             result = "fail";
 
         i.Result = result;
-        if (result == "fail") i.RemovedFromService = true;
+        // Follows the result: a retest that passes puts it back in service.
+        i.RemovedFromService = result == "fail";
     }
 
     // ------------------------------------------------------------------ items
@@ -352,6 +362,8 @@ public sealed class JobEditorWindow : Window
             Location = src.Location,
             EquipmentClass = src.EquipmentClass,
             ItemType = src.ItemType,
+            InsulationVoltage = src.InsulationVoltage,
+            CordLength = src.CordLength,
         });
         RefreshSummary();
     }
@@ -419,7 +431,8 @@ public sealed class JobEditorWindow : Window
         _client.SelectedIndex = ci >= 0 ? ci + 1 : 0;
     }
 
-    private void Save()
+    /// <summary>Copies the form into the job. Used by Save and by the certificate preview.</summary>
+    private void ApplyForm()
     {
         _job.CertNumber = _cert.Text.Trim();
         _job.SiteAddress = _site.Text.Trim();
@@ -428,7 +441,6 @@ public sealed class JobEditorWindow : Window
         _job.TesterLicence = _licence.Text.Trim();
         _job.TestEquipment = _equipment.Text.Trim();
         _job.TagStart = _tagStart.Text.Trim();
-
         _job.ClientId = _client.SelectedIndex > 0 ? _clients[_client.SelectedIndex - 1].Id : null;
 
         var env = ENVIRONMENTS[Math.Max(0, _environment.SelectedIndex)];
@@ -437,6 +449,33 @@ public sealed class JobEditorWindow : Window
 
         foreach (var i in _items) Grade(i);
         _job.Items = _items.ToList();
+    }
+
+    private bool Validate()
+    {
+        string? problem = null;
+        if (!DateTime.TryParseExact(_date.Text.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out _))
+            problem = $"Enter the test date as yyyy-mm-dd, e.g. {DateTime.Today:yyyy-MM-dd}. The website rejects anything else.";
+        else if (_cert.Text.Trim().Length > 0 && Repository.GetJobs().Any(j => j.Id != _job.Id
+                     && string.Equals(j.CertNumber, _cert.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
+            problem = $"Certificate number {_cert.Text.Trim()} is already used by another job.";
+        else
+        {
+            var dupes = _items.Where(i => i.TagNumber.Trim().Length > 0)
+                .GroupBy(i => i.TagNumber.Trim(), StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1)
+                .Select(g => g.Key).ToList();
+            if (dupes.Count > 0) problem = "Tag number used twice in this job: " + string.Join(", ", dupes);
+        }
+        if (problem is null) return true;
+        MessageBox.Show(this, problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        return false;
+    }
+
+    private void Save()
+    {
+        if (!Validate()) return;
+        ApplyForm();
 
         Repository.SaveJob(_job);
 
@@ -446,8 +485,11 @@ public sealed class JobEditorWindow : Window
         foreach (var i in _job.Items.Where(i => !string.IsNullOrEmpty(i.PartId)))
             PartsCatalogue.RecordUse(_job.Id, i.Id, i.PartId);
 
-        // Remember where the tag roll got to - it's continuous across jobs.
-        Repository.SetSetting("LastTagStart", _job.TagStart);
+        // The roll is continuous: the next job starts after the last tag used
+        // here. (It used to store this job's START, so the next job reused the
+        // same tag numbers.) Saving an older job never winds the roll back.
+        var next = JobRules.NextTagAfter(_job.TagStart, _job.Items.Select(i => i.TagNumber));
+        Repository.SetSetting("LastTagStart", JobRules.LaterTag(Repository.GetSetting("LastTagStart", ""), next));
         Repository.SetSetting("TesterName", _job.TesterName);
         Repository.SetSetting("TesterLicence", _job.TesterLicence);
         Repository.SetSetting("TestEquipment", _job.TestEquipment);
@@ -458,14 +500,15 @@ public sealed class JobEditorWindow : Window
 
     private void ShowCertificate()
     {
-        _job.CertNumber = _cert.Text.Trim();
-        _job.SiteAddress = _site.Text.Trim();
-        _job.TestDate = _date.Text.Trim();
-        _job.TesterName = _tester.Text.Trim();
-        _job.TesterLicence = _licence.Text.Trim();
-        foreach (var i in _items) Grade(i);
-        _job.Items = _items.ToList();
-
+        ApplyForm();
+        if (_job.IsGenerator)
+        {
+            // Generators get an inspection report, never a compliance certificate.
+            MessageBox.Show(this, "This is a generator inspection. Generators get an inspection report (AS/NZS 3010 observations), " +
+                "not an AS/NZS 3760 compliance certificate - produce it in the Test & Tag App.", "Certificate",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         new CertificateWindow(_job) { Owner = this }.ShowDialog();
     }
 

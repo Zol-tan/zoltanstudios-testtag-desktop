@@ -10,7 +10,7 @@ namespace ZoltanStudios.Suite.Services;
 /// message ("Missing required field: userId", "Invalid quote status.") so a
 /// failure can be shown as-is instead of being swallowed.
 /// </summary>
-public sealed record ApiResult(bool Ok, JsonElement Data, string Error, int Status)
+public sealed record ApiResult(bool Ok, JsonElement Data, string Error, int Status, JsonElement Root = default)
 {
     public static ApiResult Offline(string why) => new(false, default, why, 0);
 
@@ -285,7 +285,7 @@ public sealed class ApiClient : IDisposable
         var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == JsonValueKind.True;
         var data = root.TryGetProperty("data", out var d) ? d : default;
         var err = ok ? "" : Json.Str(root, "error", $"Request failed (HTTP {status}).");
-        return new ApiResult(ok, data, err, status);
+        return new ApiResult(ok, data, err, status, root);
     }
 
     // --------------------------------------------- older helpers (sync engine)

@@ -95,6 +95,7 @@ public partial class MainWindow : Window
         ("", "STOCK", "", false),
         ("parts", "Parts", Ui.GRepair, false),
         ("parts.restock", "Restock List", Ui.GWarn, true),
+        ("suppliers", "Find Parts Online", "\uE7BF", false),
         ("filament", "Filament", Ui.GBox, false),
         ("", "HELP & ADMIN", "", false),
         ("guide.3760", "AS/NZS 3760 Reference", Ui.GSchool, false),
@@ -166,6 +167,16 @@ public partial class MainWindow : Window
     /// <summary>The built-in test and tag web app is kept alive between visits, so nothing typed is lost.</summary>
     private WebAppModule? _webApp;
 
+    /// <summary>The shop browser, also kept alive so a search isn't lost when you look elsewhere.</summary>
+    private SupplierModule? _shops;
+
+    /// <summary>Opens Find Parts Online at a search or a product page.</summary>
+    public void OpenSupplier(string shop, string query, string? url = null)
+    {
+        Navigate("suppliers");
+        _shops?.Open(shop, query, url);
+    }
+
     public void Navigate(string key)
     {
         _currentKey = key;
@@ -183,13 +194,27 @@ public partial class MainWindow : Window
             _webApp ??= new WebAppModule();
             WebHost.Content = _webApp;
             WebHost.Visibility = Visibility.Visible;
+            ShopHost.Visibility = Visibility.Collapsed;
             ContentHost.Visibility = Visibility.Collapsed;
             ContentHost.Content = null;
             StatusText.Text = "Test & Tag App";
             return;
         }
 
+        if (module == "suppliers")
+        {
+            _shops ??= new SupplierModule();
+            ShopHost.Content = _shops;
+            ShopHost.Visibility = Visibility.Visible;
+            WebHost.Visibility = Visibility.Collapsed;
+            ContentHost.Visibility = Visibility.Collapsed;
+            ContentHost.Content = null;
+            StatusText.Text = "Find Parts Online";
+            return;
+        }
+
         WebHost.Visibility = Visibility.Collapsed;
+        ShopHost.Visibility = Visibility.Collapsed;
         ContentHost.Visibility = Visibility.Visible;
 
         ContentControl page = module switch
@@ -413,11 +438,9 @@ public partial class MainWindow : Window
 
     private void AddPart_Click(object sender, RoutedEventArgs e)
     {
-        // A new part is marked as edited on both counts so the next sync
-        // creates it on the server with its stock.
-        PartsCatalogue.Save(new Services.Part { Name = "New part", CatalogueDirty = true, StockDirty = true });
+        if (new PartEditorWindow(new Services.Part { LowAt = 1 }, isNew: true) { Owner = this }.ShowDialog() != true) return;
         Navigate("parts");
-        StatusText.Text = "New part added - fill in its details";
+        StatusText.Text = "Part added - it goes to the website on the next sync";
     }
 
     private void CopyRestock_Click(object sender, RoutedEventArgs e)
@@ -439,7 +462,7 @@ public partial class MainWindow : Window
 
     private void About_Click(object sender, RoutedEventArgs e)
         => MessageBox.Show(
-            "ZoltanStudios Business Suite\nVersion 0.3.0\n\n" +
+            "ZoltanStudios Business Suite\nVersion 0.4.0\n\n" +
             "Test and tag, clients, projects, messages, quotes, invoicing, bookings and stock.\n" +
             "Works offline; syncs to zoltanstudios.au when connected.",
             "About", MessageBoxButton.OK, MessageBoxImage.Information);

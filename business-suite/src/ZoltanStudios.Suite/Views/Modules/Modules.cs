@@ -27,8 +27,10 @@ public sealed class DashboardModule : ModuleBase
         var clients = Repository.GetClients().ToDictionary(c => c.Id, c => c.Display);
         string ClientName(string? id) => id is not null && clients.TryGetValue(id, out var n) ? n : "";
 
-        var overdue = jobs.Count(j => j.DaysUntilRetest < 0);
-        var dueSoon = jobs.Count(j => j.DaysUntilRetest is >= 0 and <= 60);
+        // Only the latest job per site counts: a site retested since isn't due.
+        var current = JobRules.CurrentForRetest(jobs);
+        var overdue = current.Count(j => j.DaysUntilRetest < 0);
+        var dueSoon = current.Count(j => j.DaysUntilRetest is >= 0 and <= 60);
         var unpaid = invoices.Where(i => i.IsUnpaid && Invoice.Normalise(i.Status) != "draft").ToList();
         var requests = bookings.Count(b => b.Status == "pending");
         var pending = Repository.PendingSyncCount();
@@ -68,7 +70,7 @@ public sealed class DashboardModule : ModuleBase
 
         var today = DateTime.Today.ToString("yyyy-MM-dd");
         var horizon = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd");
-        var upcoming = jobs.Where(j => j.DaysUntilRetest <= 30)
+        var upcoming = current.Where(j => j.DaysUntilRetest <= 30)
             .Select(j => new Upcoming
             {
                 When = j.NextDue,
@@ -162,7 +164,8 @@ public sealed class TestTagModule : ModuleBase
         public string Due => Job.NextDue;
         public int Items => Job.ItemCount;
         public int Failed => Job.FailCount;
-        public string State => Job.DaysUntilRetest < 0 ? "overdue" : Job.DaysUntilRetest <= 60 ? "due soon" : Job.FailCount > 0 ? "fail" : "pass";
+        public bool Superseded { get; init; }
+        public string State => Superseded ? "retested" : Job.DaysUntilRetest < 0 ? "overdue" : Job.DaysUntilRetest <= 60 ? "due soon" : Job.FailCount > 0 ? "fail" : "pass";
     }
 
     public TestTagModule(string view = "") : base(
@@ -187,16 +190,23 @@ public sealed class TestTagModule : ModuleBase
 
         var filtered = view switch
         {
-            "due"       => jobs.Where(j => j.DaysUntilRetest <= 60).OrderBy(j => j.DaysUntilRetest).ToList(),
+            "due"       => JobRules.CurrentForRetest(jobs).Where(j => j.DaysUntilRetest <= 60).OrderBy(j => j.DaysUntilRetest).ToList(),
             "generator" => jobs.Where(j => j.IsGenerator).ToList(),
             _           => jobs,
         };
-        var rows = filtered.Select(j => new JobRow { Job = j, Client = j.ClientId is not null && names.TryGetValue(j.ClientId, out var n) ? n : "" }).ToList();
+        var currentIds = JobRules.CurrentForRetest(jobs).Select(j => j.Id).ToHashSet();
+        var rows = filtered.Select(j => new JobRow
+        {
+            Job = j,
+            Client = j.ClientId is not null && names.TryGetValue(j.ClientId, out var n) ? n : "",
+            Superseded = !currentIds.Contains(j.Id),
+        }).ToList();
 
         var g = Ui.Grid();
         var bar = Ui.Toolbar(
             Forms.Btn("New Job", (_, _) => OpenJob(null), primary: true, glyph: Ui.GAdd),
             Forms.Btn("Open", (_, _) => { if (g.SelectedItem is JobRow r) OpenJob(r.Job); }, glyph: Ui.GEdit),
+            Forms.Btn("Delete", (_, _) => { if (g.SelectedItem is JobRow r) DeleteJob(r.Job); }, glyph: Ui.GDelete),
             Forms.Btn("Test & Tag App", (_, _) => (Window.GetWindow(this) as MainWindow)?.Navigate("webapp"), glyph: Ui.GGlobe));
         if (view == "due")
             bar.Children.Add(Forms.Btn("Email Reminder…", (_, _) => { if (g.SelectedItem is JobRow r) EmailReminder(r.Job, clients); }, glyph: Ui.GMail));
@@ -223,6 +233,21 @@ public sealed class TestTagModule : ModuleBase
 
         Body.Children.Add(Ui.GridCard(g, $"{rows.Count} job(s)", Ui.GBolt,
             new TextBlock { Text = "Double-click a job to open it", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
+    }
+
+    /// <summary>
+    /// Deletes a job here and, on the next sync, on the website and every
+    /// other device. Parts fitted on it go back into stock.
+    /// </summary>
+    private void DeleteJob(Job job)
+    {
+        if (MessageBox.Show(Window.GetWindow(this),
+                $"Delete job {job.CertNumber} ({(job.SiteAddress.Length > 0 ? job.SiteAddress : "no site address")}, {job.ItemCount} items)?\n\n" +
+                "It's removed from the website and your other devices on the next sync. This can't be undone.",
+                "Delete job", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        PartsCatalogue.ClearUsageFor(job.Id);
+        Repository.DeleteJob(job.Id);
+        if (Window.GetWindow(this) is MainWindow mw) mw.ReloadCurrent();
     }
 
     /// <summary>Opens the default mail program with a retest reminder filled in.</summary>
@@ -324,7 +349,8 @@ public sealed class ClientsModule : ModuleBase
         var g = Ui.Grid();
         Body.Children.Add(Ui.Toolbar(
             Forms.Btn("New Client", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd),
-            Forms.Btn("Edit", (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is { } sel) Edit((Client)sel); }, glyph: Ui.GEdit)));
+            Forms.Btn("Edit", (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is { } sel) Edit((Client)sel); }, glyph: Ui.GEdit),
+            Forms.Btn("Delete", (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is Client c) Delete(c); }, glyph: Ui.GDelete)));
 
         if (clients.Count == 0)
         {
@@ -355,6 +381,18 @@ public sealed class ClientsModule : ModuleBase
         g.MouseDoubleClick += (_, _) => { if (Ui.Prop(g.SelectedItem, "C") is { } sel) Edit((Client)sel); };
         Body.Children.Add(Ui.GridCard(g, $"{rows.Count} client(s)", Ui.GPeople,
             new TextBlock { Text = "Double-click to edit", Foreground = Ui.Res("FaintText"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }));
+    }
+
+    private void Delete(Client c)
+    {
+        var jobs = Repository.GetJobs().Count(j => j.ClientId == c.Id);
+        if (MessageBox.Show(Window.GetWindow(this),
+                $"Delete {c.Display}?\n\n" +
+                (string.IsNullOrEmpty(c.ServerId) ? "" : "Their portal account on the website is switched off on the next sync. ") +
+                (jobs > 0 ? $"Their {jobs} job(s) and any invoices are kept." : ""),
+                "Delete client", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        Repository.DeleteClient(c.Id);
+        if (Window.GetWindow(this) is MainWindow mw) mw.ReloadCurrent();
     }
 
     private void Edit(Client? c)
@@ -389,7 +427,11 @@ public sealed class InvoicesModule : ModuleBase
         var g = Ui.Grid();
         Body.Children.Add(Ui.Toolbar(
             Forms.Btn("New Invoice", (_, _) => Edit(null), primary: true, glyph: Ui.GAdd),
-            Forms.Btn("Invoice a Job…", (_, _) => Edit(null), glyph: Ui.GBolt),
+            Forms.Btn("Invoice a Job…", (_, _) =>
+            {
+                var w = new InvoiceEditorWindow(null, null, pickJob: true) { Owner = Window.GetWindow(this) };
+                if (w.ShowDialog() == true && Window.GetWindow(this) is MainWindow mw) mw.ReloadCurrent();
+            }, glyph: Ui.GBolt),
             Forms.Btn("Open", (_, _) => { if (Ui.Prop(g.SelectedItem, "Inv") is { } sel) Edit((Invoice)sel); }, glyph: Ui.GEdit)));
 
         var unpaid = all.Where(i => i.IsUnpaid && Invoice.Normalise(i.Status) != "draft").ToList();
@@ -483,7 +525,7 @@ public sealed class CalendarModule : ModuleBase
 
         var rows = view == "pending"
             ? bookings.OrderBy(r => r.When).ToList()
-            : bookings.Concat(Repository.GetJobs()
+            : bookings.Concat(JobRules.CurrentForRetest(Repository.GetJobs())
                     .Where(j => j.DaysUntilRetest is >= 0 and <= 120)
                     .Select(j => new Row
                     {

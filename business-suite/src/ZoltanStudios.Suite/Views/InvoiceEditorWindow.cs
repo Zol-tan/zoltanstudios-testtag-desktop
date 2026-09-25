@@ -38,7 +38,7 @@ public sealed class InvoiceEditorWindow : Window
     private readonly TextBlock _totals = new();
     private DataGrid _grid = null!;
 
-    public InvoiceEditorWindow(Invoice? existing = null, Job? fromJob = null)
+    public InvoiceEditorWindow(Invoice? existing = null, Job? fromJob = null, bool pickJob = false)
     {
         _invoice = existing ?? new Invoice
         {
@@ -58,6 +58,9 @@ public sealed class InvoiceEditorWindow : Window
 
         if (fromJob is not null) GenerateFrom(fromJob);
         Recalculate();
+
+        // "Invoice a Job..." goes straight to choosing the job.
+        if (pickJob) Loaded += (_, _) => PickJob();
     }
 
     private static string NextNumber()
@@ -298,53 +301,14 @@ public sealed class InvoiceEditorWindow : Window
     private void GenerateFrom(Job job)
     {
         _lines.Clear();
-
-        var std = job.Items.Count(i => i.ItemType is "standard" or "");
-        var tools = job.Items.Count(i => i.ItemType == "power_tool");
-        var rcd = job.Items.Count(i => i.ItemType == "rcd");
-        var micro = job.Items.Count(i => i.ItemType == "microwave");
-        var total = job.Items.Count;
-
-        _lines.Add(new InvoiceLine
-        {
-            Description = $"Test and tag call-out - {job.SiteAddress} "
-                        + $"(includes first {_rates.CallOutIncludes} items)",
-            Quantity = 1,
-            Rate = _rates.CallOut,
-        });
-
-        var chargeable = Math.Max(0, std - _rates.CallOutIncludes);
-        var rate = total >= 200 ? _rates.PerItem200
-                 : total >= 100 ? _rates.PerItem100
-                 : _rates.PerItemStandard;
-
-        if (chargeable > 0)
-            _lines.Add(new InvoiceLine
-            {
-                Description = total >= 100
-                    ? $"Additional items tested (volume rate, {total} items total)"
-                    : "Additional items tested",
-                Quantity = chargeable,
-                Rate = rate,
-            });
-
-        if (tools > 0)
-            _lines.Add(new InvoiceLine { Description = "Power tools / heavy equipment", Quantity = tools, Rate = _rates.PerItemPowerTool });
-        if (rcd > 0)
-            _lines.Add(new InvoiceLine { Description = "RCD / safety switch testing", Quantity = rcd, Rate = _rates.PerItemRcd });
-        if (micro > 0)
-            _lines.Add(new InvoiceLine { Description = "Microwave leakage testing", Quantity = micro, Rate = _rates.PerItemMicrowave });
-
-        // Parts fitted on site are billable and easy to forget otherwise.
-        foreach (var (name, qty, sell) in PartsCatalogue.UsedOn(job.Id))
-            _lines.Add(new InvoiceLine
-            {
-                Description = "Repair part fitted - " + name,
-                Quantity = qty,
-                Rate = sell,
-            });
+        foreach (var l in JobRules.InvoiceLinesFor(job, _rates, PartsCatalogue.All(includeInactive: true), PartsCatalogue.UsedOn(job.Id)))
+            _lines.Add(new InvoiceLine { Description = l.Description, Quantity = l.Quantity, Rate = l.Rate });
+        _loadedWithoutLines = false;
 
         _invoice.JobId = job.Id;
+        // The invoice goes to the job's client - without one it can't reach the website.
+        var ci = _clients.FindIndex(c => c.Id == job.ClientId);
+        if (ci >= 0) _client.SelectedIndex = ci + 1;
         if (_notes.Text.Length == 0)
             _notes.Text = $"Certificate {job.CertNumber}, tested {job.TestDate}";
 
@@ -374,6 +338,9 @@ public sealed class InvoiceEditorWindow : Window
     }
 
     // ------------------------------------------------------------------- print
+
+    private void Warn(string message)
+        => MessageBox.Show(this, message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
 
     private void Print()
     {
@@ -415,6 +382,15 @@ public sealed class InvoiceEditorWindow : Window
 
     private void Save()
     {
+        var number = _number.Text.Trim();
+        if (number.Length == 0) { Warn("Give the invoice a number."); return; }
+        if (Repository.GetInvoices().Any(i => i.Id != _invoice.Id && string.Equals(i.Number, number, StringComparison.OrdinalIgnoreCase)))
+        { Warn($"Invoice number {number} is already used. The website won't accept it twice."); return; }
+        foreach (var (label, value) in new[] { ("Issued", _issued.Text.Trim()), ("Due", _due.Text.Trim()) })
+            if (!DateTime.TryParseExact(value, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
+            { Warn($"{label} date must be yyyy-mm-dd, e.g. {DateTime.Today:yyyy-MM-dd}."); return; }
+        if (_lines.Any(l => l.Quantity < 0 || l.Rate < 0)) { Warn("Quantities and rates can't be negative."); return; }
+
         _invoice.Number = _number.Text.Trim();
         _invoice.IssuedDate = _issued.Text.Trim();
         _invoice.DueDate = _due.Text.Trim();

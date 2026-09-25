@@ -216,7 +216,14 @@ public sealed class CertificateWindow : Window
             g.Rows.Add(r);
         }
 
-        Row("Site address", _job.SiteAddress, "Environment", _job.Environment);
+        // The client wasn't on the certificate at all before 0.4.
+        var client = string.IsNullOrEmpty(_job.ClientId) ? null
+            : Repository.GetClients(includeDeleted: true).FirstOrDefault(c => c.Id == _job.ClientId);
+        if (client is not null)
+            Row("Client", client.Display, "Contact", string.Join("  ", new[] { client.Phone, client.Email }.Where(x => x.Length > 0)));
+        var env = JobEditorWindow.ENVIRONMENTS.FirstOrDefault(e => e.Value == _job.Environment);
+        Row("Site address", _job.SiteAddress, "Environment",
+            (env.Label ?? _job.Environment) + $" ({_job.RetestMonths}-month retest)");
         Row("Test date", _job.TestDate, "Next test due", _job.NextDue);
         Row("Tested by", _job.TesterName, "Licence / cert no.", _job.TesterLicence);
         Row("Test equipment", _job.TestEquipment, "Calibrated", _job.CalibrationDate);

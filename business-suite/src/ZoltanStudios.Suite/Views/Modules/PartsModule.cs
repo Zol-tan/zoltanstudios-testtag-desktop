@@ -49,20 +49,24 @@ public sealed class PartsModule : ModuleBase
             return;
         }
 
-        var copy = Button("Copy list", primary: true);
+        var g = Ui.Grid();
+        var copy = Button("Copy list (by shop)", primary: true);
         copy.Click += (_, _) =>
         {
             Clipboard.SetText(PartsCatalogue.RestockText(low));
             copy.Content = "Copied";
         };
-        Body.Children.Add(Bar(copy));
+        var open = Button("Open Product Page");
+        open.Click += (_, _) => { if (g.SelectedItem is Part p) OpenPage(p); };
+        Body.Children.Add(Bar(copy, open));
 
-        var g = Ui.Grid();
-        g.Columns.Add(Ui.Col("I/N", nameof(Part.Sku), 100));
+        g.Columns.Add(Ui.Col("Shop", nameof(Part.SupplierOrGuess), 90));
+        g.Columns.Add(Ui.Col("Item no.", nameof(Part.Sku), 100));
         g.Columns.Add(Ui.Col("Part", nameof(Part.Name)));
         g.Columns.Add(Ui.Col("Left", nameof(Part.OnHand), 60));
         g.Columns.Add(Ui.Col("Low at", nameof(Part.LowAt), 70));
-        g.ItemsSource = low;
+        g.ItemsSource = low.OrderBy(p => p.SupplierOrGuess).ThenBy(p => p.Name).ToList();
+        g.MouseDoubleClick += (_, _) => { if (g.SelectedItem is Part p) OpenPage(p); };
         Body.Children.Add(Ui.GridCard(g, $"{low.Count} part(s) to reorder", Ui.GWarn));
     }
 
@@ -114,7 +118,7 @@ public sealed class PartsModule : ModuleBase
         // ---- search and filter
         _search.Width = 260;
         _search.Padding = new Thickness(6, 4, 6, 4);
-        _search.ToolTip = "Search by name or Bunnings I/N";
+        _search.ToolTip = "Search by name, item number or shop";
         _search.TextChanged += (_, _) => ApplyFilter();
 
         foreach (var f in new[] { "All", "Running low", "Kits", "Archived" }) _filter.Items.Add(f);
@@ -126,9 +130,17 @@ public sealed class PartsModule : ModuleBase
         var add = Button("Add Part", primary: true);
         add.Click += (_, _) =>
         {
-            PartsCatalogue.Save(new Part { Name = "New part", CatalogueDirty = true, StockDirty = true });
-            Reload();
+            if (new PartEditorWindow(new Part { LowAt = 1 }, isNew: true) { Owner = Window.GetWindow(this) }.ShowDialog() == true) Reload();
         };
+        var find = Button("Find Parts Online");
+        find.Click += (_, _) => (Window.GetWindow(this) as MainWindow)?.OpenSupplier("Bunnings", _search.Text.Trim());
+        var edit = Button("Edit…");
+        edit.Click += (_, _) =>
+        {
+            if (_grid.SelectedItem is Part p && new PartEditorWindow(p) { Owner = Window.GetWindow(this) }.ShowDialog() == true) Reload();
+        };
+        var page = Button("Product Page");
+        page.Click += (_, _) => { if (_grid.SelectedItem is Part p) OpenPage(p); };
         var reprice = Button("Reprice from markup");
         reprice.Click += (_, _) => Reprice();
 
@@ -139,6 +151,9 @@ public sealed class PartsModule : ModuleBase
         left.Children.Add(_filter);
         var right = new StackPanel { Orientation = Orientation.Horizontal };
         right.Children.Add(reprice);
+        right.Children.Add(page);
+        right.Children.Add(edit);
+        right.Children.Add(find);
         right.Children.Add(add);
         DockPanel.SetDock(left, Dock.Left);
         DockPanel.SetDock(right, Dock.Right);
@@ -163,7 +178,11 @@ public sealed class PartsModule : ModuleBase
             MinHeight = 260,
         };
         _grid.Columns.Add(Text("Part", nameof(Part.Name), 0));
-        _grid.Columns.Add(Text("I/N", nameof(Part.Sku), 85));
+        _grid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Shop", Binding = new Binding(nameof(Part.SupplierOrGuess)), Width = new DataGridLength(85), IsReadOnly = true,
+        });
+        _grid.Columns.Add(Text("Item no.", nameof(Part.Sku), 85));
         _grid.Columns.Add(Text("Cost", nameof(Part.Cost), 70, "0.00"));
         _grid.Columns.Add(Text("Sell", nameof(Part.Sell), 70, "0.00"));
         _grid.Columns.Add(Text("In stock", nameof(Part.OnHand), 70));
@@ -176,10 +195,7 @@ public sealed class PartsModule : ModuleBase
         {
             Header = "Active", Binding = new Binding(nameof(Part.Active)), Width = new DataGridLength(55),
         });
-        _grid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Status", Binding = new Binding(nameof(Part.StatusText)), Width = new DataGridLength(90), IsReadOnly = true,
-        });
+        _grid.Columns.Add(Ui.StatusCol("Status", nameof(Part.StatusText), 90));
 
         _grid.CellEditEnding += (_, _) => Dispatcher.BeginInvoke(new Action(SaveEdits));
         Body.Children.Add(Ui.GridCard(_grid, "Parts catalogue", Ui.GRepair));
@@ -242,7 +258,9 @@ public sealed class PartsModule : ModuleBase
             _ => _parts.Where(p => p.Active),
         };
         if (q.Length > 0)
-            list = list.Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || p.Sku.Contains(q));
+            list = list.Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || p.Sku.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || p.SupplierOrGuess.Contains(q, StringComparison.OrdinalIgnoreCase));
         _grid.ItemsSource = list.ToList();
     }
 
@@ -266,6 +284,13 @@ public sealed class PartsModule : ModuleBase
             _loaded[p.Id] = now;
         }
         _grid.Items.Refresh();
+    }
+
+    /// <summary>The part's page at its shop, or a search there for its item number / name.</summary>
+    private void OpenPage(Part p)
+    {
+        var shop = p.SupplierOrGuess.Length > 0 && p.SupplierOrGuess != "Other" ? p.SupplierOrGuess : "Bunnings";
+        (Window.GetWindow(this) as MainWindow)?.OpenSupplier(shop, p.Sku.Length > 0 ? p.Sku : p.Name, p.Url.Length > 0 ? p.Url : null);
     }
 
     private void Reprice()

@@ -21,6 +21,16 @@ public sealed class Part
     /// </summary>
     public bool Consumable { get; set; }
 
+    /// <summary>Where it's bought: Bunnings, Jaycar, Altronics...</summary>
+    public string Supplier { get; set; } = "";
+
+    /// <summary>The product page, for re-ordering and checking the price.</summary>
+    public string Url { get; set; } = "";
+
+    /// <summary>The supplier, or Bunnings for an old part with a 7-digit I/N and none recorded.</summary>
+    public string SupplierOrGuess => Supplier.Length > 0 ? Supplier
+        : System.Text.RegularExpressions.Regex.IsMatch(Sku ?? "", @"^\d{7}$") ? "Bunnings" : "";
+
     /// <summary>Name, price or settings edited here and not yet sent to the server.</summary>
     public bool CatalogueDirty { get; set; }
 
@@ -104,6 +114,8 @@ public static class PartsCatalogue
                 Consumable INTEGER NOT NULL DEFAULT 0,
                 CatalogueDirty INTEGER NOT NULL DEFAULT 0,
                 StockDirty INTEGER NOT NULL DEFAULT 0,
+                Supplier  TEXT NOT NULL DEFAULT '',
+                Url       TEXT NOT NULL DEFAULT '',
                 UpdatedAt TEXT NOT NULL DEFAULT ''
             );
 
@@ -124,6 +136,10 @@ public static class PartsCatalogue
         Database.AddColumnIfMissing(c, "Parts", "Consumable", "INTEGER NOT NULL DEFAULT 0");
         Database.AddColumnIfMissing(c, "Parts", "CatalogueDirty", "INTEGER NOT NULL DEFAULT 0");
         Database.AddColumnIfMissing(c, "Parts", "StockDirty", "INTEGER NOT NULL DEFAULT 0");
+        Database.AddColumnIfMissing(c, "Parts", "Supplier", "TEXT NOT NULL DEFAULT ''");
+        Database.AddColumnIfMissing(c, "Parts", "Url", "TEXT NOT NULL DEFAULT ''");
+        // How many actually came out of stock (-1 = recorded before this was kept).
+        Database.AddColumnIfMissing(c, "PartsUsed", "Taken", "INTEGER NOT NULL DEFAULT -1");
         SeedIfEmpty();
     }
 
@@ -140,9 +156,10 @@ public static class PartsCatalogue
         {
             using var cmd = c.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,UpdatedAt)
-                VALUES ($id,$sku,$n,$c,$s,$q,$low,1,$con,$u)
+                INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,Supplier,Url,UpdatedAt)
+                VALUES ($id,$sku,$n,$c,$s,$q,$low,1,$con,'Bunnings',$url,$u)
                 """;
+            cmd.Parameters.AddWithValue("$url", Suppliers.SearchUrl("Bunnings", sku));
             cmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             cmd.Parameters.AddWithValue("$sku", sku);
             cmd.Parameters.AddWithValue("$n", name);
@@ -182,6 +199,8 @@ public static class PartsCatalogue
                 Consumable = r.GetInt32(r.GetOrdinal("Consumable")) == 1,
                 CatalogueDirty = r.GetInt32(r.GetOrdinal("CatalogueDirty")) == 1,
                 StockDirty = r.GetInt32(r.GetOrdinal("StockDirty")) == 1,
+                Supplier = r.GetString(r.GetOrdinal("Supplier")),
+                Url = r.GetString(r.GetOrdinal("Url")),
             });
         }
         return list;
@@ -192,8 +211,17 @@ public static class PartsCatalogue
 
     /// <summary>Plain-text list to paste into a message or take to the trade desk.</summary>
     public static string RestockText(List<Part> low)
-        => "Restock list - ZoltanStudios - " + DateTime.Today.ToString("d MMM yyyy") + "\n\n"
-         + string.Join("\n", low.Select(p => (p.Sku ?? "").PadRight(9) + p.Name + "  -  " + p.OnHand + " left"));
+    {
+        var sb = new System.Text.StringBuilder("Restock list - ZoltanStudios - " + DateTime.Today.ToString("d MMM yyyy") + "\n");
+        foreach (var g in low.GroupBy(p => p.SupplierOrGuess.Length > 0 ? p.SupplierOrGuess : "Other").OrderBy(g => g.Key))
+        {
+            sb.Append("\n").Append(g.Key).Append('\n');
+            foreach (var p in g)
+                sb.Append("  ").Append((p.Sku ?? "").PadRight(9)).Append(p.Name)
+                  .Append("  -  ").Append(p.OnHand).Append(" left, buy ").Append(Math.Max(1, p.LowAt + 1 - p.OnHand)).Append('\n');
+        }
+        return sb.ToString();
+    }
 
     /// <summary>Parts that can be billed as fitted to an item.</summary>
     public static List<Part> Fittable() => All().Where(p => !p.Consumable).ToList();
@@ -203,12 +231,14 @@ public static class PartsCatalogue
         using var c = Database.Open();
         using var cmd = c.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,CatalogueDirty,StockDirty,UpdatedAt)
-            VALUES ($id,$sku,$n,$c,$s,$q,$l,$a,$con,$cd,$sd,$u)
+            INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,CatalogueDirty,StockDirty,Supplier,Url,UpdatedAt)
+            VALUES ($id,$sku,$n,$c,$s,$q,$l,$a,$con,$cd,$sd,$sup,$url,$u)
             ON CONFLICT(Id) DO UPDATE SET
                 Sku=$sku, Name=$n, Cost=$c, Sell=$s, OnHand=$q, LowAt=$l, Active=$a,
-                Consumable=$con, CatalogueDirty=$cd, StockDirty=$sd, UpdatedAt=$u
+                Consumable=$con, CatalogueDirty=$cd, StockDirty=$sd, Supplier=$sup, Url=$url, UpdatedAt=$u
             """;
+        cmd.Parameters.AddWithValue("$sup", p.Supplier ?? "");
+        cmd.Parameters.AddWithValue("$url", p.Url ?? "");
         cmd.Parameters.AddWithValue("$id", p.Id);
         cmd.Parameters.AddWithValue("$sku", p.Sku);
         cmd.Parameters.AddWithValue("$n", p.Name);
@@ -287,18 +317,22 @@ public static class PartsCatalogue
                 LowAt = mine is { CatalogueDirty: true } ? mine.LowAt : sp.LowAt,
                 Active = mine is { CatalogueDirty: true } ? mine.Active : sp.Active,
                 Consumable = mine is { CatalogueDirty: true } ? mine.Consumable : sp.Consumable,
+                // An older server without these columns sends nothing: keep ours.
+                Supplier = mine is { CatalogueDirty: true } || sp.Supplier.Length == 0 ? mine?.Supplier ?? "" : sp.Supplier,
+                Url = mine is { CatalogueDirty: true } || sp.Url.Length == 0 ? mine?.Url ?? "" : sp.Url,
                 OnHand = mine is { StockDirty: true } ? mine.OnHand : sp.OnHand,
                 CatalogueDirty = mine?.CatalogueDirty ?? false,
                 StockDirty = mine?.StockDirty ?? false,
             };
 
             Exec("""
-                INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,CatalogueDirty,StockDirty,UpdatedAt)
-                VALUES ($id,$sku,$n,$c,$s,$q,$l,$a,$con,$cd,$sd,$u)
+                INSERT INTO Parts (Id,Sku,Name,Cost,Sell,OnHand,LowAt,Active,Consumable,CatalogueDirty,StockDirty,Supplier,Url,UpdatedAt)
+                VALUES ($id,$sku,$n,$c,$s,$q,$l,$a,$con,$cd,$sd,$sup,$url,$u)
                 ON CONFLICT(Id) DO UPDATE SET
                     Sku=$sku, Name=$n, Cost=$c, Sell=$s, OnHand=$q, LowAt=$l, Active=$a,
-                    Consumable=$con, CatalogueDirty=$cd, StockDirty=$sd, UpdatedAt=$u
+                    Consumable=$con, CatalogueDirty=$cd, StockDirty=$sd, Supplier=$sup, Url=$url, UpdatedAt=$u
                 """,
+                ("$sup", merged.Supplier), ("$url", merged.Url),
                 ("$id", merged.Id), ("$sku", merged.Sku), ("$n", merged.Name), ("$c", merged.Cost),
                 ("$s", merged.Sell), ("$q", merged.OnHand), ("$l", merged.LowAt),
                 ("$a", merged.Active ? 1 : 0), ("$con", merged.Consumable ? 1 : 0),
@@ -331,8 +365,9 @@ public static class PartsCatalogue
         using (var cmd = c.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO PartsUsed (Id,JobId,ItemId,PartId,Quantity,Sell,UsedAt)
-                VALUES ($id,$j,$i,$p,$q,$s,$u)
+                INSERT INTO PartsUsed (Id,JobId,ItemId,PartId,Quantity,Sell,UsedAt,Taken)
+                VALUES ($id,$j,$i,$p,$q,$s,$u,
+                        (SELECT MIN($q, MAX(0, OnHand)) FROM Parts WHERE Id = $p))
                 """;
             cmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             cmd.Parameters.AddWithValue("$j", jobId);
@@ -354,7 +389,9 @@ public static class PartsCatalogue
     }
 
     /// <summary>
-    /// Undoes a job's recorded usage, returning the parts to stock first.
+    /// Undoes a job's recorded usage, returning the parts to stock first -
+    /// only as many as were actually taken, so a part fitted when the count
+    /// was already 0 doesn't appear from nowhere when the job is re-saved.
     /// Deleting the rows without restoring stock meant every re-save of a job
     /// counted the same part out again.
     /// </summary>
@@ -367,7 +404,7 @@ public static class PartsCatalogue
         {
             restore.CommandText = """
                 UPDATE Parts SET OnHand = OnHand + (
-                    SELECT COALESCE(SUM(u.Quantity), 0) FROM PartsUsed u
+                    SELECT COALESCE(SUM(CASE WHEN u.Taken < 0 THEN u.Quantity ELSE u.Taken END), 0) FROM PartsUsed u
                     WHERE u.PartId = Parts.Id AND u.JobId = $j)
                 WHERE Id IN (SELECT PartId FROM PartsUsed WHERE JobId = $j)
                 """;

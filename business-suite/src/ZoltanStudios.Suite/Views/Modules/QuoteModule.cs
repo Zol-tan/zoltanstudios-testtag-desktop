@@ -166,6 +166,9 @@ public sealed class QuoteModule : ModuleBase
     {
         _results.Children.Clear();
         var lines = new List<(string Label, double Amount)>();
+        // Shown under the total. (These used to be added to the input panel on
+        // every keystroke, so the same note piled up again and again.)
+        var notes = new List<string>();
         double total;
 
         switch (_service.SelectedIndex)
@@ -192,6 +195,15 @@ public sealed class QuoteModule : ModuleBase
                     lines.Add(($"Microwave leakage × {micro} @ ${_rates.PerItemMicrowave:0.00}", micro * _rates.PerItemMicrowave));
 
                 total = lines.Sum(l => l.Amount);
+
+                // The published offers, so a phone quote doesn't miss them.
+                if (items > 0 && items <= _rates.IntroOfferItems && _rates.IntroOfferPrice < total)
+                    notes.Add($"New customer? The intro offer is ${_rates.IntroOfferPrice:0} flat for up to {_rates.IntroOfferItems} items " +
+                         $"(saves ${total - _rates.IntroOfferPrice:0.00}).");
+                if (items > 0)
+                    notes.Add($"On a contract: quarterly ${total * (1 - _rates.ContractQuarterlyPercent / 100):0.00} a visit " +
+                         $"({_rates.ContractQuarterlyPercent:0}% off), annual ${total * (1 - _rates.ContractAnnualPercent / 100):0.00} " +
+                         $"({_rates.ContractAnnualPercent:0}% off).");
                 break;
             }
 
@@ -226,7 +238,7 @@ public sealed class QuoteModule : ModuleBase
                     var labour = Math.Max(_rates.RepairMinimum, hours * _rates.RepairHourly);
                     lines.Add(($"Labour {hours:0.#}h @ ${_rates.RepairHourly:0}/h", labour));
                     if (labour == _rates.RepairMinimum && hours * _rates.RepairHourly < _rates.RepairMinimum)
-                        Note($"Minimum charge of ${_rates.RepairMinimum:0} applied.");
+                        notes.Add($"Minimum charge of ${_rates.RepairMinimum:0} applied.");
                     if (parts > 0) lines.Add(("Parts", parts));
                     total = lines.Sum(l => l.Amount);
                 }
@@ -291,6 +303,13 @@ public sealed class QuoteModule : ModuleBase
 
         Divider();
         Row("Total", $"${total:0.00}", "AccentBrush", big: true);
+
+        foreach (var n in notes)
+            _results.Children.Add(new TextBlock
+            {
+                Text = n, FontSize = 11.5, Foreground = Ui.Res("OkBrush"), TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 8, 0, 0),
+            });
 
         // The placeholder rates are a real trap: quoting from them by mistake
         // would be worse than having no calculator at all.

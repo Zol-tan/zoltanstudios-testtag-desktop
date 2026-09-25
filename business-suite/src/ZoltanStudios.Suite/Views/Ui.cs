@@ -272,6 +272,7 @@ public sealed class StatusColour : IValueConverter
     public static string Tone(string s) => s.Trim().ToLowerInvariant() switch
     {
         "pass" or "paid" or "confirmed" or "accepted" or "completed" or "final" or "active" or "ok" or "in stock" => "Ok",
+        "retested" or "archived" => "Neutral",
         "fail" or "failed" or "overdue" or "declined" or "cancelled" or "closed" or "out" or "revoked" => "Bad",
         "pending" or "due" or "partial" or "sent" or "review" or "retest" or "low" or "● new" or "new" or "due soon" => "Warn",
         "in progress" or "queued" or "deadline" or "open" or "booking" => "Accent",

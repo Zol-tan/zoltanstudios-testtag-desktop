@@ -95,6 +95,19 @@ public sealed class ClientEditorWindow : Window
             return;
         }
 
+        var email = _email.Text.Trim();
+        if (email.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            MessageBox.Show(this, "That email address doesn't look right. The website needs a valid one to create the client's account.",
+                "Client", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (email.Length > 0 && Repository.GetClients().Any(c => c.Id != _client.Id && string.Equals(c.Email, email, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show(this, "Another client already has that email address.", "Client", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         _client.Name = _name.Text.Trim();
         _client.Company = _company.Text.Trim();
         _client.Email = _email.Text.Trim();
