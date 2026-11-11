@@ -83,6 +83,39 @@ function fixedRcdTotalPrice(job) {
   return fixedRcdSummary(job).tested * FIXED_RCD_PRICE;
 }
 
+// The blank row every new job starts with, never filled in. It must not be
+// printed or counted as a pass: it has no description and no readings.
+function isUnusedItem(it) {
+  if (!it) return true;
+  const blank = v => v === undefined || v === null || String(v).trim() === "";
+  return blank(it.description) && blank(it.makeModel) && blank(it.serialNumber) && blank(it.location) &&
+    blank(it.earthContinuity) && blank(it.insulationResistance) && blank(it.leakageCurrent) &&
+    blank(it.notes) && blank(it.partId) && (it.rcdTest || "n/a") === "n/a" && !it.rcdTripTestEnabled &&
+    (it.visual || "pass") === "pass";
+}
+function certItems(job) {
+  return (job.items || []).filter(it => !isUnusedItem(it));
+}
+
+// Headline numbers for the certificate: items AND fixed RCDs, so a failed
+// safety switch can never sit under "0 failed, 100% pass".
+function certificateCounts(job) {
+  const items = certItems(job);
+  const r = fixedRcdSummary(job);
+  const itemPass = items.filter(i => i.overallResult === "pass").length;
+  const itemFail = items.filter(i => i.overallResult === "fail").length;
+  const pass = itemPass + r.pass, fail = itemFail + r.fail, total = items.length + r.tested;
+  return {
+    items: items.length, rcds: r.tested, total, pass, fail,
+    rate: total ? Math.round(pass / total * 100) : 0,
+    breakdown: !r.tested ? "" : !items.length ? "fixed RCD" + (r.tested === 1 ? "" : "s")
+      : items.length + " item" + (items.length === 1 ? "" : "s") + " + " + r.tested + " RCD" + (r.tested === 1 ? "" : "s"),
+  };
+}
+
+// Test current follows the RCD type: Type I = 10 mA, Type II = 30 mA.
+function fixedRcdMa(r) { return r && r.rcdType === "I" ? 10 : 30; }
+
 const FIXED_RCD_LABEL = { pass: "PASS", fail: "FAIL", nt: "NOT TESTED", "": "PENDING" };
 
 function fixedRcdReadings(r) {
@@ -117,7 +150,7 @@ function fixedRcdSectionHtml(job) {
         <td>${escapeHtml(r.board) || "&mdash;"}</td>
         <td>${escapeHtml(r.circuit) || "&mdash;"}</td>
         <td>${escapeHtml(r.location) || "&mdash;"}</td>
-        <td>${r.method === "time" ? "Type " + escapeHtml(r.rcdType || "II") : "&mdash;"}</td>
+        <td>${r.method === "time" ? "Type " + escapeHtml(r.rcdType === "I" ? "I" : "II") + " &middot; " + fixedRcdMa(r) + " mA" : "&mdash;"}</td>
         <td style="font-family:monospace">${ms(v.t0)}</td>
         <td style="font-family:monospace">${ms(v.t180)}</td>
         <td>${fixedRcdBadgeHtml(g)}</td>
@@ -131,7 +164,7 @@ function fixedRcdSectionHtml(job) {
   return `
     <h2 style="font-size:16px;margin:8px 0 6px;color:#0f172a">Fixed RCD (Safety Switch) Test Log</h2>
     <p style="font-size:12px;color:#475569;margin:0 0 10px;line-height:1.5">
-      Operating-time test at 1&times; rated residual current (${escapeHtml(f.rated || "30")} mA), at 0&deg; and 180&deg;, from a socket outlet on each protected circuit (AS/NZS 3760:2022).
+      Operating-time test at 1&times; the RCD's rated residual current (Type II 30 mA, Type I 10 mA), at 0&deg; and 180&deg;, from a socket outlet on each protected circuit (AS/NZS 3760:2022).
       Pass: Type II &le; 300 ms, Type I &le; 40 ms. &frac12;&times; and 5&times; tests not available on the instrument.<br/>
       Instrument: ${instrument || "&mdash;"}.
       ${s.pass} passed, ${s.fail} failed${s.nt ? ", " + s.nt + " not tested" : ""} of ${s.total}.
@@ -151,18 +184,18 @@ function fixedRcdLogText(job) {
   const f = fixedRcdOf(job);
   const s = fixedRcdSummary(job);
   const head = [
-    "RCD TEST LOG - trip test times for " + (f.rated || "30") + " mA RCDs",
+    "RCD TEST LOG - trip test times at 1x rated current (Type II 30 mA, Type I 10 mA)",
     "Testing company: ZoltanStudios",
     "Tested by: " + (job.testerName || "") + " (" + (job.testerLicense || "") + ")",
     "Instrument: " + [f.instrument, f.serial ? "s/n " + f.serial : "", f.calDate ? "calibrated " + f.calDate : ""].filter(Boolean).join(", "),
     "Client & premises: " + [job.clientCompany || job.clientName, job.siteAddress].filter(Boolean).join(", "),
     "Test date: " + (job.testDate || ""),
     "",
-    ["Board", "Circuit", "Location", "Type", "1x 0deg ms", "1x 180deg ms", "x1/2", "x5", "Result", "Notes"].join("\t"),
+    ["Board", "Circuit", "Location", "Type / mA", "1x 0deg ms", "1x 180deg ms", "x1/2", "x5", "Result", "Notes"].join("\t"),
   ];
   const lines = f.rows.map(r => {
     const v = fixedRcdReadings(r);
-    return [r.board, r.circuit, r.location, r.method === "time" ? r.rcdType || "II" : "", v.t0, v.t180, "N/A", "N/A", FIXED_RCD_LABEL[gradeFixedRcd(r)], r.notes]
+    return [r.board, r.circuit, r.location, r.method === "time" ? (r.rcdType === "I" ? "I" : "II") + " / " + fixedRcdMa(r) : "", v.t0, v.t180, "N/A", "N/A", FIXED_RCD_LABEL[gradeFixedRcd(r)], r.notes]
       .map(x => String(x || "").replace(/[\t\n]/g, " ")).join("\t");
   });
   return head.concat(lines, ["", "Pass " + s.pass + " / Fail " + s.fail + " / Not tested " + s.nt + " / Total " + s.total,
@@ -232,7 +265,7 @@ function FixedRcdPanel({ job, onChange }) {
         e("ol", { className: "list-decimal pl-5 mt-2 space-y-1 text-slate-600" },
           e("li", null, "Battery isolation switch ON, so the tester stays on when the RCD trips."),
           e("li", null, "Plug the tester's own mains lead into a power point on the circuit. Nothing in the appliance socket."),
-          e("li", null, "Enter → Menu B → F3 (RCD) → F1 (Time test). F3 for options: 30 mA, Type II, PRCD off."),
+          e("li", null, "Enter → Menu B → F3 (RCD) → F1 (Time test). F3 for options: Type II at 30 mA (Type I at 10 mA), PRCD off."),
           e("li", null, "0° → F3 to trip, read the ms. Reset at the board, switch to 180°, test again."),
           e("li", null, "Pass: Type II ≤ 300 ms, Type I ≤ 40 ms. A fail stays a fail: don't retest for a pass, refer it to a licensed electrician."),
           e("li", null, "No power point on the circuit (lighting, cool rooms, HWU)? Push-button test it at the board."))),
@@ -257,7 +290,7 @@ function FixedRcdPanel({ job, onChange }) {
               r.method === "time" && e(React.Fragment, null,
                 e("div", { className: "col-span-2 sm:col-span-1" }, e("label", { className: lbl, htmlFor: "frt-" + r.id }, "Type"),
                   e("select", { id: "frt-" + r.id, className: inp, value: r.rcdType, onChange: ev => setRow(r.id, { rcdType: ev.target.value }) },
-                    e("option", { value: "II" }, "II · ≤ 300 ms"), e("option", { value: "I" }, "I · ≤ 40 ms"))),
+                    e("option", { value: "II" }, "II · 30 mA · ≤ 300 ms"), e("option", { value: "I" }, "I · 10 mA · ≤ 40 ms"))),
                 e("div", null, e("label", { className: lbl, htmlFor: "fr0-" + r.id }, "1× 0° (ms)"),
                   e("input", { id: "fr0-" + r.id, className: inp + " font-mono", inputMode: "decimal", value: r.t0, disabled: r.noTrip, placeholder: "< " + lim,
                     onChange: ev => setRow(r.id, { t0: ev.target.value.replace(/[^0-9.]/g, "") }) })),
@@ -302,7 +335,7 @@ function FixedRcdReportSection({ job }) {
   return e("div", { className: "mb-6" },
     e("h3", { className: "font-semibold text-slate-900 mb-1" }, "Fixed RCD (Safety Switch) Test Log"),
     e("p", { className: "text-xs text-slate-500 mb-3" },
-      `1× rated current (${f.rated || "30"} mA) at 0° and 180° from a socket outlet. Instrument: ${[f.instrument, f.serial && "s/n " + f.serial, f.calDate && "cal. " + formatDisplayDate(f.calDate)].filter(Boolean).join(", ")}. ${s.pass} passed, ${s.fail} failed${s.nt ? ", " + s.nt + " not tested" : ""} of ${s.total}.`),
+      `1× rated current (Type II 30 mA, Type I 10 mA) at 0° and 180° from a socket outlet. Instrument: ${[f.instrument, f.serial && "s/n " + f.serial, f.calDate && "cal. " + formatDisplayDate(f.calDate)].filter(Boolean).join(", ")}. ${s.pass} passed, ${s.fail} failed${s.nt ? ", " + s.nt + " not tested" : ""} of ${s.total}.`),
     e("div", { className: "overflow-x-auto" },
       e("table", { className: "w-full text-xs border-collapse" },
         e("thead", null, e("tr", { className: "text-left border-b-2 border-slate-300" },
@@ -313,7 +346,7 @@ function FixedRcdReportSection({ job }) {
             e("td", { className: "py-1.5 pr-2" }, r.board || "—"),
             e("td", { className: "py-1.5 pr-2 font-mono" }, r.circuit || "—"),
             e("td", { className: "py-1.5 pr-2" }, r.location || "—"),
-            e("td", { className: "py-1.5 pr-2" }, r.method === "time" ? "Type " + (r.rcdType || "II") : "—"),
+            e("td", { className: "py-1.5 pr-2 whitespace-nowrap" }, r.method === "time" ? "Type " + (r.rcdType === "I" ? "I" : "II") + " · " + fixedRcdMa(r) + " mA" : "—"),
             e("td", { className: "py-1.5 pr-2 font-mono" }, v.t0 || "—"),
             e("td", { className: "py-1.5 pr-2 font-mono" }, v.t180 || "—"),
             e("td", { className: "py-1.5 pr-2" }, badge(gradeFixedRcd(r))));

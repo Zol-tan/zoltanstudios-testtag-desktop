@@ -7,11 +7,13 @@ function ReportView({
   job,
   onBack
 }) {
-  const passCount = job.items.filter(i => i.overallResult === "pass").length;
-  const failCount = job.items.filter(i => i.overallResult === "fail").length;
-  const passRate = job.items.length ? Math.round(passCount / job.items.length * 100) : 0;
+  const certCounts = certificateCounts(job);
+  const shownItems = certItems(job);
+  const passCount = certCounts.pass;
+  const failCount = certCounts.fail;
+  const passRate = certCounts.rate;
   const nextTestDate = addMonths(job.testDate, job.retestMonths);
-  const failedItems = job.items.filter(i => i.overallResult === "fail");
+  const failedItems = shownItems.filter(i => i.overallResult === "fail");
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto p-4 md:p-8"
   }, /*#__PURE__*/React.createElement("div", {
@@ -95,9 +97,11 @@ function ReportView({
     className: "bg-slate-50 rounded-lg p-3 text-center"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-bold text-slate-900"
-  }, job.items.length), /*#__PURE__*/React.createElement("div", {
+  }, certCounts.total), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-slate-500 uppercase tracking-wide"
-  }, "Items Tested")), /*#__PURE__*/React.createElement("div", {
+  }, "Tested"), certCounts.breakdown && /*#__PURE__*/React.createElement("div", {
+    className: "text-[11px] text-slate-500"
+  }, certCounts.breakdown)), /*#__PURE__*/React.createElement("div", {
     className: "bg-emerald-50 rounded-lg p-3 text-center"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-bold text-emerald-700"
@@ -189,7 +193,7 @@ function ReportView({
     className: "py-2 pr-2"
   }, "Insul. (MΩ)"), /*#__PURE__*/React.createElement("th", {
     className: "py-2 pr-2"
-  }, "Result"))), /*#__PURE__*/React.createElement("tbody", null, job.items.map(item => /*#__PURE__*/React.createElement("tr", {
+  }, "Result"))), /*#__PURE__*/React.createElement("tbody", null, shownItems.map(item => /*#__PURE__*/React.createElement("tr", {
     key: item.id,
     className: "border-b border-slate-100"
   }, /*#__PURE__*/React.createElement("td", {

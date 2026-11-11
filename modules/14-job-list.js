@@ -304,7 +304,7 @@ function JobListView({
   }, jobs.length === 0 ? "No jobs yet. Create your first test & tag record." : "No jobs match your search.")) : /*#__PURE__*/React.createElement("div", {
     className: "space-y-3"
   }, filtered.slice().sort((a, b) => b.createdAt - a.createdAt).map(job => {
-    const failCount = job.items.filter(i => i.overallResult === "fail").length;
+    const failCount = job.items.filter(i => i.overallResult === "fail").length + fixedRcdSummary(job).fail;
     return /*#__PURE__*/React.createElement("div", {
       key: job.id,
       className: "bg-white border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-300 transition-colors cursor-pointer",

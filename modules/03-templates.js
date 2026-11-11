@@ -230,22 +230,21 @@ function attachmentsHtml(job) {
 
 function buildCertificateHTML(job) {
   const nextTestDate = addMonths(job.testDate, job.retestMonths);
-  const passCount = job.items.filter(i => i.overallResult === "pass").length;
-  const failCount = job.items.filter(i => i.overallResult === "fail").length;
-  const passRate = job.items.length ? Math.round(passCount / job.items.length * 100) : 0;
-  const failedItems = job.items.filter(i => i.overallResult === "fail");
+  const items = certItems(job);
+  const cc = certificateCounts(job);
+  const failedItems = items.filter(i => i.overallResult === "fail");
   const tiles = `
     <div class="tiles">
-      <div class="tile"><div class="tile-num">${job.items.length}</div><div class="tile-label">Items Tested</div></div>
-      <div class="tile pass"><div class="tile-num">${passCount}</div><div class="tile-label">Passed</div></div>
-      <div class="tile fail"><div class="tile-num">${failCount}</div><div class="tile-label">Failed</div></div>
-      <div class="tile rate"><div class="tile-num">${passRate}%</div><div class="tile-label">Pass Rate</div></div>
+      <div class="tile"><div class="tile-num">${cc.total}</div><div class="tile-label">Tested</div>${cc.breakdown ? `<div class="tile-label" style="text-transform:none;letter-spacing:0">${cc.breakdown}</div>` : ""}</div>
+      <div class="tile pass"><div class="tile-num">${cc.pass}</div><div class="tile-label">Passed</div></div>
+      <div class="tile fail"><div class="tile-num">${cc.fail}</div><div class="tile-label">Failed</div></div>
+      <div class="tile rate"><div class="tile-num">${cc.rate}%</div><div class="tile-label">Pass Rate</div></div>
     </div>`;
   const failedCallout = failedItems.length ? `<div class="callout">
         <h3>&#9888; Items Requiring Attention</h3>
         <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}</li>`).join("")}</ul>
       </div>` : "";
-  const rows = job.items.map(item => `
+  const rows = items.map(item => `
       <tr>
         <td>${escapeHtml(item.assetId) || "&mdash;"}</td>
         <td>${escapeHtml(item.description) || "&mdash;"}</td>
@@ -266,7 +265,7 @@ function buildCertificateHTML(job) {
     ${tiles}
     ${detailsGridHtml(job, nextTestDate)}
     ${failedCallout}
-    <table>
+    ${items.length ? `<table>
       <thead>
         <tr>
           <th>Tag Number</th><th>Description</th><th>Class</th><th>Location</th>
@@ -274,7 +273,7 @@ function buildCertificateHTML(job) {
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>
+    </table>` : ""}
     ${fixedRcdSectionHtml(job)}
     <div class="declaration">
       <h3>Statutory Declaration</h3>
@@ -297,7 +296,8 @@ function buildCertificateHTML(job) {
 }
 function buildRecordHTML(job) {
   const nextTestDate = addMonths(job.testDate, job.retestMonths);
-  const failedItems = job.items.filter(i => i.overallResult === "fail");
+  const items = certItems(job);
+  const failedItems = items.filter(i => i.overallResult === "fail");
   const failedCallout = failedItems.length ? `<div class="callout">
         <h3>&#9888; Items Requiring Attention</h3>
         <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}</li>`).join("")}</ul>
@@ -313,7 +313,7 @@ function buildRecordHTML(job) {
     const compensated = !isNaN(raw) ? ` (${(raw + 2).toFixed(1)}mA w/ +2mA)` : "";
     return `${typeLabel}, Ramp: ${escapeHtml(item.rcdMeasuredTripCurrentMa || "?")}mA${compensated}`;
   };
-  const rows = job.items.map(item => `
+  const rows = items.map(item => `
       <tr>
         <td>${escapeHtml(item.assetId) || "&mdash;"}</td>
         <td>${escapeHtml(item.description) || "&mdash;"}</td>
