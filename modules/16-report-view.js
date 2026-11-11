@@ -14,9 +14,21 @@ function ReportView({
   const passRate = certCounts.rate;
   const nextTestDate = addMonths(job.testDate, job.retestMonths);
   const failedItems = shownItems.filter(i => i.overallResult === "fail");
+  // A certificate can't be issued (PDF, email, download, print) until
+  // every item and fixed RCD is finished and the tester is in calibration.
+  const readiness = jobReadiness(job);
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto p-4 md:p-8"
+  }, !readiness.ready && /*#__PURE__*/React.createElement("div", {
+    className: "print:hidden"
   }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-amber-100 border border-amber-300 text-amber-900 rounded-xl px-4 py-3 mb-3 text-sm font-semibold"
+  }, "Draft. Finish the items below to issue the certificate. The PDF, email and certificate download unlock once everything is done."), /*#__PURE__*/React.createElement(JobReadinessPanel, {
+    job: job
+  })), readiness.ready && /*#__PURE__*/React.createElement(JobReadinessPanel, {
+    job: job,
+    compact: true
+  }), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between mb-6 print:hidden flex-wrap gap-3"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onBack,
@@ -32,11 +44,11 @@ function ReportView({
   className: "inline-flex items-center gap-2 border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm"
 }, /*#__PURE__*/React.createElement(FileText, {
   size: 15
-}), " Generator Report"), (function () {
+}), " Generator Report"), readiness.ready && (function () {
   return React.createElement(EmailCertButton, {
     job: job
   });
-})(), (function () {
+})(), readiness.ready && (function () {
   return React.createElement(PdfButtons, {
     job: job
   });
@@ -46,7 +58,7 @@ function ReportView({
     title: "Download the full working record as a single HTML file"
   }, /*#__PURE__*/React.createElement(FileText, {
     size: 15
-  }), " Record"), /*#__PURE__*/React.createElement("button", {
+  }), " Record"), readiness.ready && /*#__PURE__*/React.createElement("button", {
     onClick: () => downloadSingleFile(buildCertificateHTML(job), "certificate.html"),
     className: "inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm",
     title: "Download just the certificate as a single HTML file"
@@ -64,7 +76,7 @@ function ReportView({
     title: "Download both files together in one job folder"
   }, /*#__PURE__*/React.createElement(ClipboardList, {
     size: 15
-  }), " Both (ZIP)"), /*#__PURE__*/React.createElement("button", {
+  }), " Both (ZIP)"), readiness.ready && /*#__PURE__*/React.createElement("button", {
     onClick: () => window.print(),
     className: "inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm text-sm"
   }, /*#__PURE__*/React.createElement(Printer, {

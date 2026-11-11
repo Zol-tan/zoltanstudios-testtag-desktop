@@ -31,6 +31,8 @@ function jobToServerPayload(job) {
     jobType: job.jobType || "test_tag",
     generator: job.generator || null,
     fixedRcd: job.fixedRcd || null,
+    // App-only item fields (visual checklist, polarity, fault, repair...).
+    itemExtras: itemExtrasFor(job.items),
     attachments: job.attachments || [],
     meggerEquipment: job.meggerEquipment || "",
     meggerCalibrationDate: job.meggerCalibrationDate || "",
@@ -104,7 +106,7 @@ function serverJobToLocal(j) {
     nextTestDate: j.nextTestDate || "",
     testerName: j.testerName || "",
     testerLicense: j.testerLicense || "",
-    items: (j.items || []).map(it => ({
+    items: applyItemExtras((j.items || []).map(it => ({
       id: it.id,
       qrId: it.qrId || "",
       itemType: it.itemType || "standard",
@@ -130,7 +132,7 @@ function serverJobToLocal(j) {
       overrideResult: !!it.overrideResult,
       notes: it.notes || "",
       partId: it.partId || ""
-    }))
+    })), j.itemExtras)
   };
 }
 async function pullJobsFromServer(cfg) {

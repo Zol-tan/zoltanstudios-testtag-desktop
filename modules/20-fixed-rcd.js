@@ -91,7 +91,9 @@ function isUnusedItem(it) {
   return blank(it.description) && blank(it.makeModel) && blank(it.serialNumber) && blank(it.location) &&
     blank(it.earthContinuity) && blank(it.insulationResistance) && blank(it.leakageCurrent) &&
     blank(it.notes) && blank(it.partId) && (it.rcdTest || "n/a") === "n/a" && !it.rcdTripTestEnabled &&
-    (it.visual || "pass") === "pass";
+    (it.visual || "pass") === "pass" &&
+    !Object.values(it.visualChecks || {}).some(Boolean) && blank(it.polarity) && blank(it.cordLength) &&
+    blank(it.faultDescription) && blank(it.repairType);
 }
 function certItems(job) {
   return (job.items || []).filter(it => !isUnusedItem(it));

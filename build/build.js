@@ -74,7 +74,7 @@ const required = [
   "startCaptureSession", "isDesktopShell",
   "emailDocumentToClient", "EmailCertButton",
   "SignaturePad", "testerSignatureBlockHtml", "renderHtmlToPdf", "fetchParts", "buildAssetRegisterCSVForJobs", "buildAssetRegisterCSV", "PartFittedSelect", "PartsView", "PartsSummaryCard", "partsTotalFor", "downloadJobPdf", "jobPdfBase64", "PdfButtons",
-  "FixedRcdPanel", "FixedRcdReportSection", "certificateCounts", "certItems", "fixedRcdSectionHtml", "gradeFixedRcd", "fixedRcdTotalPrice",
+  "FixedRcdPanel", "FixedRcdReportSection", "certificateCounts", "certItems", "jobReadiness", "ItemChecksRow", "itemStatus", "itemExtrasFor", "applyItemExtras", "draftBannerHtml", "fixedRcdSectionHtml", "gradeFixedRcd", "fixedRcdTotalPrice",
   "deleteJobOnServer", "mergeServerJobs", "flushPendingDeletes", "syncTesterSignature", "filesCall",
 ];
 const absent = required.filter((sym) => !bundle.includes(sym));

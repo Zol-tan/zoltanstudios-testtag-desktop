@@ -74,7 +74,7 @@ function tt_ensure_job_columns(): void
 }
 
 /** The job fields kept as JSON rather than columns. */
-const TT_EXTRA_KEYS = ['generator', 'attachments', 'meggerEquipment', 'meggerCalibrationDate', 'fixedRcd'];
+const TT_EXTRA_KEYS = ['generator', 'attachments', 'meggerEquipment', 'meggerCalibrationDate', 'fixedRcd', 'itemExtras'];
 
 function job_out(array $j): array
 {
@@ -124,6 +124,8 @@ function job_out(array $j): array
         'meggerCalibrationDate' => (string)($extra['meggerCalibrationDate'] ?? ''),
         // Fixed RCD (switchboard safety switch) log from the web app.
         'fixedRcd' => is_array($extra['fixedRcd'] ?? null) ? $extra['fixedRcd'] : null,
+        // App-only item fields (visual checklist, polarity, fault, repair), keyed by qrId.
+        'itemExtras' => is_array($extra['itemExtras'] ?? null) ? $extra['itemExtras'] : (object)[],
         'items' => $items,
     ];
 }

@@ -242,12 +242,12 @@ function buildCertificateHTML(job) {
     </div>`;
   const failedCallout = failedItems.length ? `<div class="callout">
         <h3>&#9888; Items Requiring Attention</h3>
-        <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}</li>`).join("")}</ul>
+        <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}${i.faultDescription ? `: ${escapeHtml(i.faultDescription)}` : ""}${i.removedFromService ? " &mdash; danger tagged, removed from service" : ""}</li>`).join("")}</ul>
       </div>` : "";
   const rows = items.map(item => `
       <tr>
         <td>${escapeHtml(item.assetId) || "&mdash;"}</td>
-        <td>${escapeHtml(item.description) || "&mdash;"}</td>
+        <td>${escapeHtml(item.description) || "&mdash;"}${item.repairDetails ? `<br/><span style="font-size:10px;color:#1d4ed8">Repaired on site: ${escapeHtml(item.repairDetails)}</span>` : ""}</td>
         <td>${escapeHtml(item.equipmentClass)}</td>
         <td>${escapeHtml(item.location) || "&mdash;"}</td>
         <td style="text-transform:capitalize">${escapeHtml(item.visual)}</td>
@@ -261,6 +261,7 @@ function buildCertificateHTML(job) {
        </div>` : "";
   const body = `
     ${letterheadHtml("Test &amp; Tag Compliance Certificate")}
+    ${draftBannerHtml(job)}
     ${certNumBanner}
     ${tiles}
     ${detailsGridHtml(job, nextTestDate)}
@@ -300,7 +301,7 @@ function buildRecordHTML(job) {
   const failedItems = items.filter(i => i.overallResult === "fail");
   const failedCallout = failedItems.length ? `<div class="callout">
         <h3>&#9888; Items Requiring Attention</h3>
-        <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}</li>`).join("")}</ul>
+        <ul>${failedItems.map(i => `<li>${escapeHtml(i.assetId) || "Unlabelled"} &mdash; ${escapeHtml(i.description) || "No description"}${i.location ? ` (${escapeHtml(i.location)})` : ""}${i.faultDescription ? `: ${escapeHtml(i.faultDescription)}` : ""}${i.removedFromService ? " &mdash; danger tagged, removed from service" : ""}</li>`).join("")}</ul>
       </div>` : "";
   const rcdTripSummary = item => {
     if (!item.rcdTripTestEnabled) return "&mdash;";
@@ -329,6 +330,17 @@ function buildRecordHTML(job) {
         <td style="font-size:11px">${rcdTripSummary(item)}</td>
         <td>${resultBadgeHtml(item.overallResult)}</td>
         <td>${escapeHtml(item.notes) || "&mdash;"}${(function () {
+          const bits = [];
+          if (item.faultDescription) bits.push("Fault: " + escapeHtml(item.faultDescription));
+          if (item.repairDetails) bits.push("Repair: " + escapeHtml(item.repairDetails));
+          if (item.removedFromService) bits.push("Danger tagged, removed from service");
+          if (item.polarity) bits.push("Polarity: " + escapeHtml(item.polarity));
+          if (item.cordLength) bits.push("Length: " + escapeHtml(item.cordLength) + " m");
+          const vc = item.visualChecks || {};
+          const vf = (typeof VISUAL_CHECKS !== "undefined" ? VISUAL_CHECKS : []).filter(c => vc[c.k] === "fail").map(c => c.label);
+          if (vf.length) bits.push("Visual fail: " + vf.join(", "));
+          return bits.length ? '<br/><span style="font-size:10px;color:#475569">' + bits.join("<br/>") + "</span>" : "";
+        })()}${(function () {
           // Internal record only - the client certificate doesn't list parts.
           const p = item.partId && typeof partById === "function" ? partById(cachedParts(), item.partId) : null;
           return p ? '<br/><span style="color:#1d4ed8;font-size:10px">&#128295; Part fitted: ' + escapeHtml(p.name) + '</span>' : "";

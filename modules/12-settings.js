@@ -795,7 +795,17 @@ const blankItem = () => ({
   rcdMeasuredTripCurrentMa: "",
   overallResult: "pass",
   overrideResult: false,
-  notes: ""
+  notes: "",
+  // Guided checks (21-item-checks.js). Older items have no checksVersion.
+  checksVersion: CHECKS_VERSION,
+  visualChecks: {},
+  polarity: "",
+  cordLength: "",
+  faultDescription: "",
+  repairType: "",
+  plugRating: "",
+  repairDetails: "",
+  removedFromService: false
 });
 
 // ---------------------------------------------------------------------------

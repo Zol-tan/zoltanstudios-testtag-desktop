@@ -148,6 +148,9 @@ function getTagColour(dateStr, retestMonths) {
 // overrides it.
 function suggestResult(item) {
   if (item.visual === "fail") return "fail";
+  if (Object.values(item.visualChecks || {}).includes("fail")) return "fail";
+  if (item.polarity === "fail") return "fail";
+  if (item.equipmentClass === "I" && earthOpen(item.earthContinuity)) return "fail";
   if (item.equipmentClass === "I") {
     const earth = parseFloat(item.earthContinuity);
     if (item.earthContinuity !== "" && !isNaN(earth) && earth > 1) return "fail";
@@ -202,6 +205,9 @@ async function persistJobs(jobs) {
 function ResultBadge({
   result
 }) {
+  if (result === "pending") return /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"
+  }, "PENDING");
   const isPass = result === "pass";
   return /*#__PURE__*/React.createElement("span", {
     className: `inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${isPass ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`

@@ -54,6 +54,7 @@ function JobFormView({
     });
   };
   const updateItem = (id, patch) => {
+    setDirty(true);
     setJob(j => ({
       ...j,
       items: j.items.map(it => {
@@ -104,11 +105,11 @@ function JobFormView({
   };
   return /*#__PURE__*/React.createElement(React.Fragment, null, pickerItemId && /*#__PURE__*/React.createElement(AppliancePickerModal, {
     onSelect: appliance => {
-      updateItem(pickerItemId, {
+      updateItem(pickerItemId, Object.assign({
         description: appliance.label,
         equipmentClass: appliance.equipmentClass,
         itemType: appliance.itemType
-      });
+      }, likelySurgeProtected({ description: appliance.label }) ? { insulationTestVoltage: "250" } : {}));
     },
     onClose: () => setPickerItemId(null)
   }), /*#__PURE__*/React.createElement("div", {
@@ -652,7 +653,7 @@ function JobFormView({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col gap-1"
   }, /*#__PURE__*/React.createElement(ResultBadge, {
-    result: item.overallResult
+    result: itemStatus(item)
   }), /*#__PURE__*/React.createElement("label", {
     className: "flex items-center gap-1 text-[10px] text-slate-400"
   }, /*#__PURE__*/React.createElement("input", {
@@ -679,7 +680,12 @@ function JobFormView({
     title: "Remove item"
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 15
-  })))), item._expanded && /*#__PURE__*/React.createElement("tr", {
+  })))), /*#__PURE__*/React.createElement(ItemChecksRow, {
+    item: item,
+    parts: partsCat,
+    inputCls: inputCls,
+    onChange: patch => updateItem(item.id, patch)
+  }), item._expanded && /*#__PURE__*/React.createElement("tr", {
     className: "border-b border-slate-100 bg-slate-50"
   }, /*#__PURE__*/React.createElement("td", null), /*#__PURE__*/React.createElement("td", {
     colSpan: 9,
@@ -863,7 +869,10 @@ function JobFormView({
     }, "Total: $", estimatedTotal.toFixed(2)))), totalItems >= 100 && /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-amber-600 mt-1"
     }, "⚠ Volume tier applies for standard items (", totalItems >= 200 ? "$2.50" : "$2.90", "/item for ", totalItems >= 200 ? "200+" : "100–199", " items) applied."));
-  })(), folderStatus === "connected" && /*#__PURE__*/React.createElement("p", {
+  })(), /*#__PURE__*/React.createElement(FaultPresetList, null), /*#__PURE__*/React.createElement(JobReadinessPanel, {
+    job: job,
+    compact: true
+  }), folderStatus === "connected" && /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-emerald-600 text-right mb-2"
   }, /*#__PURE__*/React.createElement(CheckCircle2, {
     size: 12,
