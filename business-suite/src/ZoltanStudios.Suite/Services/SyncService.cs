@@ -39,13 +39,24 @@ public sealed class SyncService
             // already on the server links to that account instead of failing.
             var pulled = await PullClientsAsync(ct);
             var (pushed, failed) = await PushAsync(ct);
+            // Stock bought, before the pull: the server owns the count, so it
+            // must include these before the local copy is replaced from it.
+            pushed += await PushPurchasesAsync(ct);
             pulled += await PullAsync(ct);
             // After the pull, so the first sync can match local parts to the
             // server's (by I/N) before any edits are sent against them.
             pushed += await PushPartsAsync(ct);
+            // Parts new to the server can now take their purchases.
+            pushed += await PushPurchasesAsync(ct);
+
+            // Invoice photos and the tester's signature (the server's file store).
+            var files = await ServerFiles.SyncAsync(_api, ct);
+            pushed += files.Sent;
+            pulled += files.Received;
 
             Repository.SetSetting("LastSync", DateTime.Now.ToString("s"));
             var msg = $"Synced. {pushed} sent, {pulled} received.";
+            if (files.Error.Length > 0) msg += " " + files.Error;
             if (failed > 0) msg += $" {failed} change(s) couldn't be sent - see Settings ▸ Sync problems.";
             return new SyncResult(failed == 0, pushed, pulled, msg, failed);
         }
@@ -155,53 +166,63 @@ public sealed class SyncService
         var client = string.IsNullOrEmpty(job.ClientId) ? null
             : Repository.GetClients(includeDeleted: true).FirstOrDefault(c => c.Id == job.ClientId);
 
-        var payload = new
+        var jobFields = new
         {
-            job = new
+            // services.php finds the job by its server id, else by externalId.
+            id = job.ServerId ?? "",
+            externalId = job.Id,
+            certNumber = job.CertNumber,
+            clientId = string.IsNullOrEmpty(client?.ServerId) ? null : client!.ServerId,
+            clientName = client?.Name ?? "",
+            clientCompany = client?.Company ?? "",
+            clientEmail = client?.Email ?? "",
+            clientPhone = client?.Phone ?? "",
+            siteAddress = job.SiteAddress,
+            environment = job.Environment,
+            retestMonths = job.RetestMonths,
+            testDate = job.TestDate,
+            testerName = job.TesterName,
+            testerLicense = job.TesterLicence,
+            status = job.Status,
+            jobType = job.JobType,
+            source = "desktop",
+            items = job.Items.Select(i => new
             {
-                // services.php finds the job by its server id, else by externalId.
-                id = job.ServerId ?? "",
-                externalId = job.Id,
-                certNumber = job.CertNumber,
-                clientId = string.IsNullOrEmpty(client?.ServerId) ? null : client!.ServerId,
-                clientName = client?.Name ?? "",
-                clientCompany = client?.Company ?? "",
-                clientEmail = client?.Email ?? "",
-                clientPhone = client?.Phone ?? "",
-                siteAddress = job.SiteAddress,
-                environment = job.Environment,
-                retestMonths = job.RetestMonths,
-                testDate = job.TestDate,
-                testerName = job.TesterName,
-                testerLicense = job.TesterLicence,
-                status = job.Status,
-                jobType = job.JobType,
-                source = "desktop",
-                items = job.Items.Select(i => new
-                {
-                    assetId = i.TagNumber,
-                    itemType = i.ItemType,
-                    description = i.Description,
-                    makeModel = i.MakeModel,
-                    serialNumber = i.SerialNumber,
-                    location = i.Location,
-                    equipmentClass = i.EquipmentClass,
-                    visual = i.Visual,
-                    earthContinuity = i.EarthContinuity,
-                    insulationResistance = i.InsulationResistance,
-                    insulationTestVoltage = i.InsulationVoltage,
-                    leakageCurrent = i.LeakageCurrent,
-                    rcdTest = i.RcdTest,
-                    overallResult = i.Result,
-                    overrideResult = i.ResultOverridden,
-                    partId = i.PartId,
-                    notes = i.Notes,
-                }).ToArray(),
-            },
+                assetId = i.TagNumber,
+                itemType = i.ItemType,
+                description = i.Description,
+                makeModel = i.MakeModel,
+                serialNumber = i.SerialNumber,
+                location = i.Location,
+                equipmentClass = i.EquipmentClass,
+                visual = i.Visual,
+                earthContinuity = i.EarthContinuity,
+                insulationResistance = i.InsulationResistance,
+                insulationTestVoltage = i.InsulationVoltage,
+                leakageCurrent = i.LeakageCurrent,
+                rcdTest = i.RcdTest,
+                overallResult = i.Result,
+                overrideResult = i.ResultOverridden,
+                partId = i.PartId,
+                notes = i.Notes,
+            }).ToArray(),
         };
+
+        // Photos and signatures go only when changed here, with the ids last
+        // seen on the server so it merges (see AttachmentStore).
+        var jobNode = System.Text.Json.JsonSerializer.SerializeToNode(jobFields)!.AsObject();
+        var (attDirty, attBase) = AttachmentStore.JobSyncState(job.Id);
+        if (attDirty)
+        {
+            jobNode["attachments"] = System.Text.Json.JsonSerializer.SerializeToNode(
+                AttachmentStore.Get(AttachmentStore.JobOwner, job.Id).Select(a => a.ToPayload()).ToArray());
+            jobNode["attachmentsBase"] = System.Text.Json.JsonSerializer.SerializeToNode(attBase);
+        }
+        var payload = new { job = jobNode };
 
         var res = await _api.CallPostAsync("api/services.php?resource=testtag&action=job_save", payload, ct);
         if (!res.Ok) return Outcome.From(res);
+        if (attDirty) AttachmentStore.MarkJobSent(job.Id);
 
         // Remember the server's id and certificate number, and take its
         // timestamp so the pull that follows doesn't treat this as newer.
@@ -427,6 +448,31 @@ public sealed class SyncService
         return sent;
     }
 
+    /// <summary>
+    /// Stock bought here. Each purchase adds to the server's count once (the
+    /// server ignores an id it has already had). Against an older server with
+    /// no "receive", the counted stock is sent instead.
+    /// </summary>
+    private async Task<int> PushPurchasesAsync(CancellationToken ct)
+    {
+        var sent = 0;
+        foreach (var p in PartsCatalogue.UnsentPurchases())
+        {
+            var res = await _api.CallPostAsync("api/parts.php?action=receive", new
+            {
+                id = p.Id, partId = p.PartId, quantity = p.Quantity, unitCost = p.UnitCost,
+                supplier = p.Supplier, purchasedAt = p.PurchasedAt,
+            }, ct);
+            if (res.Ok) { PartsCatalogue.MarkPurchaseSent(p.Id); sent++; }
+            else if (res.Error.Contains("Unknown action", StringComparison.OrdinalIgnoreCase))
+            {
+                PartsCatalogue.MarkPurchaseSent(p.Id, sendCountInstead: true);
+            }
+            // 404 "not on the server yet": a new part - tried again after the parts are sent.
+        }
+        return sent;
+    }
+
     private static Part ParsePart(JsonElement e) => new()
     {
         Id = Json.Str(e, "id"),
@@ -626,6 +672,10 @@ public sealed class SyncService
             ?? (externalId.Length > 0 ? all.FirstOrDefault(x => x.Id == externalId) : null)
             ?? all.FirstOrDefault(x => x.Id == serverId);
 
+        // Photos and signatures are reconciled on their own (they can differ
+        // after a server-side merge even when the job's timestamps match).
+        if (existing is not null && !existing.Deleted) AttachmentStore.FromServer(existing.Id, j);
+
         if (existing is not null)
         {
             if (Repository.HasPending("Jobs", existing.Id)) return false;
@@ -694,6 +744,7 @@ public sealed class SyncService
         // Written with the server's timestamp and without queueing, so it
         // isn't bounced straight back to the server.
         Repository.SaveJob(job, queue: false, stamp: ToLocalStamp(Json.Str(j, "lastUpdated")));
+        AttachmentStore.FromServer(job.Id, j);
         return existing is null;
     }
 

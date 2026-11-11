@@ -68,6 +68,8 @@
                 <MenuItem Header="_Add Part..."          Click="AddPart_Click" />
                 <MenuItem Header="_Copy Restock List"    Click="CopyRestock_Click" />
                 <MenuItem Header="_Find Parts Online"    Tag="suppliers" Click="Navigate_Click" />
+                <MenuItem Header="_Buy Stock…"           Click="BuyStock_Click" />
+                <MenuItem Header="Stock _Bought…"        Click="StockBought_Click" />
             </MenuItem>
 
             <MenuItem Header="_Help">
@@ -89,7 +91,7 @@
                              Fill="{StaticResource OkBrush}" VerticalAlignment="Center" />
                     <TextBlock x:Name="SyncText" Text="Offline" Margin="0,0,12,0"
                                Foreground="{StaticResource MutedText}" />
-                    <TextBlock x:Name="VersionText" Text="v0.4.0"
+                    <TextBlock x:Name="VersionText" Text="v0.6.1"
                                Foreground="{StaticResource FaintText}" />
                 </StackPanel>
             </StatusBarItem>

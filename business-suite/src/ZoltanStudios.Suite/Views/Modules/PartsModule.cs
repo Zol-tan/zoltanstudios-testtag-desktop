@@ -58,7 +58,9 @@ public sealed class PartsModule : ModuleBase
         };
         var open = Button("Open Product Page");
         open.Click += (_, _) => { if (g.SelectedItem is Part p) OpenPage(p); };
-        Body.Children.Add(Bar(copy, open));
+        var buy = Button("Buy Stock…");
+        buy.Click += (_, _) => BuyStock();
+        Body.Children.Add(Bar(buy, copy, open));
 
         g.Columns.Add(Ui.Col("Shop", nameof(Part.SupplierOrGuess), 90));
         g.Columns.Add(Ui.Col("Item no.", nameof(Part.Sku), 100));
@@ -98,6 +100,10 @@ public sealed class PartsModule : ModuleBase
                 Margin = new Thickness(0, 0, 0, 16),
             };
             var row = new DockPanel();
+            var buyLow = Button("Buy These…", primary: true);
+            buyLow.Click += (_, _) => BuyStock();
+            DockPanel.SetDock(buyLow, Dock.Right);
+            row.Children.Add(buyLow);
             var copy = Button("Copy restock list");
             copy.Click += (_, _) => { Clipboard.SetText(PartsCatalogue.RestockText(low)); copy.Content = "Copied"; };
             DockPanel.SetDock(copy, Dock.Right);
@@ -143,6 +149,15 @@ public sealed class PartsModule : ModuleBase
         page.Click += (_, _) => { if (_grid.SelectedItem is Part p) OpenPage(p); };
         var reprice = Button("Reprice from markup");
         reprice.Click += (_, _) => Reprice();
+        var bought = Button("Bought…");
+        bought.ToolTip = "Add stock you've bought to the selected part";
+        bought.Click += (_, _) =>
+        {
+            if (_grid.SelectedItem is not Part p) { Forms.Error(Window.GetWindow(this), "Bought", "Pick the part first."); return; }
+            if (new BoughtWindow(p, null) { Owner = Window.GetWindow(this) }.ShowDialog() == true) Reload();
+        };
+        var buyStock = Button("Buy Stock…");
+        buyStock.Click += (_, _) => BuyStock();
 
         var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 10), LastChildFill = false };
         var left = new StackPanel { Orientation = Orientation.Horizontal };
@@ -151,6 +166,8 @@ public sealed class PartsModule : ModuleBase
         left.Children.Add(_filter);
         var right = new StackPanel { Orientation = Orientation.Horizontal };
         right.Children.Add(reprice);
+        right.Children.Add(bought);
+        right.Children.Add(buyStock);
         right.Children.Add(page);
         right.Children.Add(edit);
         right.Children.Add(find);
@@ -291,6 +308,13 @@ public sealed class PartsModule : ModuleBase
     {
         var shop = p.SupplierOrGuess.Length > 0 && p.SupplierOrGuess != "Other" ? p.SupplierOrGuess : "Bunnings";
         (Window.GetWindow(this) as MainWindow)?.OpenSupplier(shop, p.Sku.Length > 0 ? p.Sku : p.Name, p.Url.Length > 0 ? p.Url : null);
+    }
+
+    private void BuyStock()
+    {
+        var w = new BuyStockWindow { Owner = Window.GetWindow(this) };
+        w.ShowDialog();
+        if (w.Changed) Reload();
     }
 
     private void Reprice()

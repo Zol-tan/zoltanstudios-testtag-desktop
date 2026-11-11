@@ -443,6 +443,16 @@ public partial class MainWindow : Window
         StatusText.Text = "Part added - it goes to the website on the next sync";
     }
 
+    private void BuyStock_Click(object sender, RoutedEventArgs e)
+    {
+        var w = new Modules.BuyStockWindow { Owner = this };
+        w.ShowDialog();
+        if (w.Changed) ReloadCurrent();
+    }
+
+    private void StockBought_Click(object sender, RoutedEventArgs e)
+        => new Modules.PurchaseHistoryWindow { Owner = this }.ShowDialog();
+
     private void CopyRestock_Click(object sender, RoutedEventArgs e)
     {
         var low = PartsCatalogue.LowStock();

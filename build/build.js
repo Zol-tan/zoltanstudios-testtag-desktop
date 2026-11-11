@@ -74,6 +74,8 @@ const required = [
   "startCaptureSession", "isDesktopShell",
   "emailDocumentToClient", "EmailCertButton",
   "SignaturePad", "testerSignatureBlockHtml", "renderHtmlToPdf", "fetchParts", "buildAssetRegisterCSVForJobs", "buildAssetRegisterCSV", "PartFittedSelect", "PartsView", "PartsSummaryCard", "partsTotalFor", "downloadJobPdf", "jobPdfBase64", "PdfButtons",
+  "FixedRcdPanel", "FixedRcdReportSection", "fixedRcdSectionHtml", "gradeFixedRcd", "fixedRcdTotalPrice",
+  "deleteJobOnServer", "mergeServerJobs", "flushPendingDeletes", "syncTesterSignature", "filesCall",
 ];
 const absent = required.filter((sym) => !bundle.includes(sym));
 if (absent.length) fail("expected symbols missing from bundle: " + absent.join(", "));

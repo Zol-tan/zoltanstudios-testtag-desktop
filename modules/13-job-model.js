@@ -9,6 +9,7 @@ const blankJob = () => ({
   tagStart: lastTagStart(),
   autoTag: true,
   generator: blankGenerator(),
+  fixedRcd: blankFixedRcd(),
   attachments: [],
   meggerEquipment: effectiveTester().meggerEquipment,
   meggerCalibrationDate: effectiveTester().meggerCalibrationDate,
@@ -248,7 +249,13 @@ function TesterSettingsModal({
     };
   }
   function doSave() {
-    saveTesterSettings(f);
+    const prev = loadTesterSettings() || {};
+    // Keep the sync bookkeeping the form doesn't know about.
+    const next = Object.assign({ signatureVersion: prev.signatureVersion || '', signaturePending: !!prev.signaturePending }, f);
+    // A new or cleared signature goes to the server for every other device.
+    if ((next.signature || '') !== (prev.signature || '')) next.signaturePending = true;
+    saveTesterSettings(next);
+    if (next.signaturePending) syncTesterSignature(loadServerConfig());
     setSaved(true);
     setTimeout(onClose, 700);
   }
@@ -299,7 +306,14 @@ function TesterSettingsModal({
     className: inp,
     value: f.testEquipmentCalibrationDate,
     onChange: set('testEquipmentCalibrationDate')
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: lbl
+  }, "Test Equipment Serial No."), /*#__PURE__*/React.createElement("input", {
+    className: inp,
+    value: f.testEquipmentSerial || "",
+    onChange: set('testEquipmentSerial'),
+    placeholder: "Printed on the back of the tester"
+  })), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: lbl

@@ -14,7 +14,7 @@ native app — the whole admin panel (`admin.html`, `admin-tools.html`) plus the
 tools and calculators. Public customer-facing pages (home, services, blog,
 client portal, certificate lookup) stay on the website.
 
-## Status — version 0.4.0
+## Status — version 0.6.1
 
 | Admin panel feature | Endpoint(s) | Suite |
 |---|---|---|
@@ -39,6 +39,10 @@ client portal, certificate lookup) stay on the website.
 | AS/NZS 3760 reference, Wavecom TnT guide | Help pages | Done — 0.3 |
 | **Find Parts Online** (Bunnings, Jaycar, Altronics in a built-in browser) | reads the product page's own schema.org data | Done — 0.4 |
 | Parts: shop, item no. and product link per part; Check My Prices; restock list by shop | `parts.php` save/list (`supplier`, `url`) | Done — 0.4 |
+| **Photos & signatures** on jobs and invoices: Use My Phone (QR), sign on the laptop, add photos from the PC | `capture.php` start/poll (the web app's phone relay) + job `attachments` | Done — 0.5 |
+| Tester signature on certificates — one signature shared with the web app / phones | `files.php` tester_get / tester_set | Done — 0.6 |
+| Invoice photos stored on the server (compressed, on disk) | `files.php` list / get / save / link / delete | Done — 0.6 |
+| **Buy Stock**: shopping list by shop, open pages in your browser, "Bought" adds to stock; purchase history | `parts.php` receive / purchases | Done — 0.6 |
 
 "Local + sync" sections work offline and sync on F5. "Live" sections read and
 write the server directly, like the admin panel does, and need a connection.
@@ -51,11 +55,13 @@ a message saying so, and project access can add but not list members.
 
 ## Find Parts Online (0.4)
 
-There's no public API for Bunnings, Jaycar or Altronics, so the suite opens
+There's no public API for Bunnings, Jaycar, Altronics or Amazon, so the suite opens
 their normal website in a built-in browser (profile
 `%LocalAppData%\ZoltanStudios\WebView2-Shops`) and reads the product details
 the page publishes for search engines (schema.org Product JSON-LD: name, item
 number, price). Checked against live Bunnings and Jaycar product pages;
+Amazon publishes none, so its product page's title, ASIN and price are
+read (tested against a page laid out like Amazon's, not the live site);
 Altronics falls back to the page's meta tags, and a price read off the page
 text is flagged as a guess for you to confirm.
 
@@ -66,6 +72,59 @@ text is flagged as a guess for you to confirm.
   reprices the sell price from your markup.
 - Parts have a shop, item number and product link; the Restock List is
   grouped by shop with "buy N" quantities and opens the product page.
+
+## Photos and signatures (0.5)
+
+**Photos & Signature…** in the job editor (and **Photos…** in the invoice
+editor) opens a panel with:
+
+- **Use My Phone…** — a QR code for the website's capture page
+  (`capture.html`, the same relay the web app uses). Scan it, take photos or
+  hand the phone over to sign; they appear in the suite within a few seconds.
+  No login on the phone: the link is good for one record for an hour.
+- **Client Signs on Phone…** — the same, but the phone shows only a name box
+  and a signature pad, and the window closes once it's signed.
+- **Client Signs Here…** — sign on the laptop (mouse, touchscreen or pen).
+- **Add Photos from PC…** — shrunk to 1600 px and turned the right way up.
+- **Copy from Job…** (invoices) — the linked job's photos.
+
+The latest signature prints on the certificate's client line (or as "Work
+accepted" on an invoice); photos print under the results. The tester's own
+signature is set in **Tools ▸ Tester Defaults** (here or on the phone).
+
+Invoice photos are stored on your server (`api/files.php`): compressed there
+to a 1600 px JPEG (signatures to a small PNG) and kept on disk in
+`testtag_uploads/files`, which the web can't open directly — only the API
+serves them. They go up on the next sync, even for a draft invoice, and
+come back with the invoice on another PC.
+
+The tester signature is one signature for everything: set it in Tester
+Defaults here, draw it in the web app's Tester Defaults on your phone, or
+use **Sign on My Phone** — the server keeps it and every app picks it up.
+
+Job photos and signatures sync with the website in the job's `attachments`.
+The suite sends them only when changed here, with `attachmentsBase` (the ids
+it last saw) so the server **merges** — a photo the phone added meanwhile is
+kept; only ones removed here are dropped. Invoice photos merge the same way.
+
+## Buying stock (0.6)
+
+**Parts ▸ Buy Stock…** (also on the Parts page and Restock List) lists what's
+low — or everything — grouped by shop, with how many to buy to get back
+above the warning level and the last price paid. Tick what you're getting,
+**Open in My Browser** opens each product page in your normal browser (where
+you're signed in to Bunnings / Jaycar), **Copy List** makes a list for the
+trade desk, and **Bought — Add to Stock** puts them in stock at the price
+paid. **Amazon** items (with an ASIN as the item no. or an amazon.com.au
+link) all go into your Amazon cart through one link, with their quantities —
+Amazon shows a page to confirm them. On a product page in Find Parts Online, **Bought This — Add to Stock…**
+does the same for one part. **Bought…** on the Parts page records stock
+bought any other way.
+
+Stock bought is *added* to the website's count (`parts.php?action=receive`,
+once per purchase id), never set, so parts fitted from a phone in the
+meantime still come off. A new price paid becomes the part's cost.
+**Parts ▸ Stock Bought…** shows the history with monthly totals.
 
 ## Building
 
@@ -91,7 +150,8 @@ files, swaps only `config.php` and the MySQL connection for SQLite, serves
 them with `php -S`, and drives them with the suite's own `Services` code:
 sign-in, every sync path (clients, jobs, invoices, bookings, deletes both
 ways) and every live admin call, plus the local rules (retests, tag roll,
-invoicing, stock, supplier pages, backup) — 154 checks. Needs PHP with pdo_sqlite and the .NET 8 SDK.
+invoicing, stock, supplier pages, backup, the phone relay, photo sync, invoice photos on the server, the
+shared tester signature and buying stock, Amazon) — 220 checks. Needs PHP with pdo_sqlite and the .NET 8 SDK.
 Add `--old-server` (with `OLD_DATA_PHP=` pointing at a previous data.php) to
 check the fallbacks for a server that hasn't been updated.
 
@@ -159,3 +219,5 @@ tests/sync-harness/          End-to-end test against the real PHP
   removed-from-service and follow-up stay in the suite only (kept through
   syncs where the item still matches by position and tag).
 - Booking location is suite-only (events have no location column).
+- The admin panel website pages don't show invoice photos (they're for the
+  suite's printed invoice).

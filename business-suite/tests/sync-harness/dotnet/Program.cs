@@ -73,6 +73,25 @@ if (args.Contains("--old-server"))
         "client edit explains the server needs the new data.php", string.Join("|", Repository.SyncProblems().Select(p => p.Error)));
     var m = await api.CallGetAsync("api/data.php?resource=projects&action=members&projectId=x");
     Check(!m.Ok && m.Error.StartsWith("Unknown action"), "members call fails with 'Unknown action' (the access window explains it)", m.Error);
+
+    // A site without files.php or the parts "receive" action yet.
+    var www = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(serverDb))!, "www", "api");
+    File.Delete(Path.Combine(www, "files.php"));
+    var pp = Path.Combine(www, "parts.php");
+    File.WriteAllText(pp, File.ReadAllText(pp).Replace("case 'receive':", "case 'receive_not_yet':"));
+    AttachmentStore.TesterSignature = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    var oldInv = new Invoice { Number = "INV-OLD1", IssuedDate = "2026-09-28", DueDate = "2026-10-12", Status = "draft" };
+    Repository.SaveInvoice(oldInv);
+    AttachmentStore.SaveForOwner("invoice", oldInv.Id, new[] { new Attachment { Kind = "photo", DataUrl = AttachmentStore.TesterSignature } });
+    await sync.SyncAsync();
+    var op = PartsCatalogue.All().First(x => !x.Consumable);
+    var opBefore = op.OnHand;
+    PartsCatalogue.RecordPurchase(op, 2, op.Cost);
+    var ors = await sync.SyncAsync();
+    Check(!ors.Message.Contains("photos") && !ors.Message.Contains("signature") && AttachmentStore.TesterSignatureDirty,
+        "without files.php: sync carries on quietly, photos and signature wait here", ors.Message);
+    Check(N("SELECT on_hand FROM testtag_parts WHERE id=$1", op.Id) == opBefore + 2 && PartsCatalogue.UnsentPurchases().Count == 0,
+        "without 'receive': stock bought is sent as a count instead", N("SELECT on_hand FROM testtag_parts WHERE id=$1", op.Id).ToString());
     Console.WriteLine($"{pass} passed, {fail} failed");
     return fail == 0 ? 0 : 1;
 }
@@ -449,6 +468,148 @@ Check(Json.Str(gp, "jobType") == "generator_inspection" && gp.GetProperty("gener
 Check(gp.GetProperty("attachments").GetArrayLength() == 2 && Json.Str(gp, "meggerEquipment") == "Megger MIT400",
     "photos, signature and insulation tester kept after the suite's edit");
 
+Console.WriteLine("== phone capture relay (photos and signatures from a phone)");
+{
+    const string Png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    // A site where capture-schema.sql was run by hand before label/mode existed.
+    Srv("CREATE TABLE testtag_capture_tokens (id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64) NOT NULL, job_id VARCHAR(64) NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE, expires_at DATETIME NOT NULL, created_at DATETIME NOT NULL)");
+
+    var phone = new HttpClient(new HttpClientHandler { CookieContainer = new System.Net.CookieContainer() });
+    async Task<(int Status, JsonElement Json)> Phone(string path, Dictionary<string, string>? form = null)
+    {
+        var res = form is null ? await phone.GetAsync(baseUrl + "/" + path)
+                               : await phone.PostAsync(baseUrl + "/" + path, new FormUrlEncodedContent(form));
+        return ((int)res.StatusCode, JsonDocument.Parse(await res.Content.ReadAsStringAsync()).RootElement.Clone());
+    }
+
+    var capJob = new Job { SiteAddress = "Capture Site", TestDate = "2026-09-25", Items = { new Item { TagNumber = "T-700", Description = "Kettle" } } };
+    Repository.SaveJob(capJob);
+
+    var (sess, serr) = await PhoneCapture.StartAsync(api, capJob.Id, "Job ZS123 - Capture Site", PhoneCapture.Modes.Signature);
+    Check(sess is not null && sess.Url.Contains("/capture.html?t=") && sess.StartedAt.Length == 19,
+        "the suite gets a phone link (and the old capture table gains label/mode)", serr);
+    var tok = sess!.Url[(sess.Url.IndexOf("t=") + 2)..];
+
+    var capInfo = await Phone("api/capture.php?action=session&token=" + tok);
+    Check(capInfo.Status == 200 && Json.Str(capInfo.Json.GetProperty("data"), "label") == "Job ZS123 - Capture Site"
+          && Json.Str(capInfo.Json.GetProperty("data"), "mode") == "signature", "the phone page learns what it's for, with no login");
+
+    var photoOnSigLink = await Phone("api/capture.php?action=upload", new() { ["token"] = tok, ["kind"] = "photo", ["data"] = Png });
+    Check(photoOnSigLink.Status == 400, "a signature-only link won't take photos");
+    var notImage = await Phone("api/capture.php?action=upload", new() { ["token"] = tok, ["kind"] = "signature", ["data"] = "data:image/png;base64," + Convert.ToBase64String("<?php echo 1;"u8.ToArray()) });
+    Check(notImage.Status == 400, "something that isn't really an image is refused");
+    var up = await Phone("api/capture.php?action=upload", new() { ["token"] = tok, ["kind"] = "signature", ["data"] = Png, ["note"] = "Sam Sample" });
+    Check(up.Status == 200, "the client's signature uploads");
+
+    var (got, perr) = await PhoneCapture.PollAsync(api, capJob.Id, sess.StartedAt);
+    Check(got.Count == 1 && got[0].IsSignature && got[0].Note == "Sam Sample" && got[0].DataUrl == Png, "the suite collects it, with the signer's name", perr);
+
+    var (anon, _) = await PhoneCapture.PollAsync(new ApiClient(baseUrl), capJob.Id, "");
+    Check(anon.Count == 0, "nobody else can collect it (poll needs the admin)");
+
+    // (Timestamps are to the second; in use the next link is never made in the same second as an earlier upload.)
+    Srv("UPDATE testtag_captures SET created_at = '2026-01-01 00:00:00'");
+    // Two photos in the same second: the old "created_at > since" lost the second one.
+    var (s2, _) = await PhoneCapture.StartAsync(api, capJob.Id, "Job ZS123", PhoneCapture.Modes.Both);
+    var tok2 = s2!.Url[(s2.Url.IndexOf("t=") + 2)..];
+    Check((await Phone("api/capture.php?action=session&token=" + tok)).Status == 403, "a new link replaces the last one for that job");
+    await Phone("api/capture.php?action=upload", new() { ["token"] = tok2, ["kind"] = "photo", ["data"] = Png, ["note"] = "one" });
+    var first = (await PhoneCapture.PollAsync(api, capJob.Id, s2.StartedAt)).Items;
+    var since = first.Max(a => a.CreatedAt)!;
+    await Phone("api/capture.php?action=upload", new() { ["token"] = tok2, ["kind"] = "photo", ["data"] = Png, ["note"] = "two" });
+    Srv("UPDATE testtag_captures SET created_at = $1 WHERE note = 'two'", since); // force "same second"
+    var second = (await PhoneCapture.PollAsync(api, capJob.Id, since)).Items;
+    Check(second.Any(a => a.Note == "two"), "a second photo in the same second isn't lost");
+
+    Check(sess.StartedAt.CompareTo(first[0].CreatedAt) <= 0 && (await PhoneCapture.PollAsync(api, capJob.Id, s2.StartedAt)).Items.All(a => !a.IsSignature),
+        "a new link only brings what's sent after it (removed photos don't come back)");
+
+    Srv("UPDATE testtag_capture_tokens SET expires_at = '2000-01-01 00:00:00'");
+    var late = await Phone("api/capture.php?action=upload", new() { ["token"] = tok2, ["kind"] = "photo", ["data"] = Png });
+    Check(late.Status == 403, "an expired link is refused");
+    var (s3, _) = await PhoneCapture.StartAsync(api, "invoice-inv1", "Invoice INV-0001", PhoneCapture.Modes.Photos);
+    Check(s3 is not null && N("SELECT COUNT(*) FROM testtag_capture_tokens WHERE expires_at < '2001-01-01'") == 0, "expired links are cleared out");
+    var tok3 = s3!.Url[(s3.Url.IndexOf("t=") + 2)..];
+    Check((await Phone("api/capture.php?action=upload", new() { ["token"] = tok3, ["kind"] = "signature", ["data"] = Png })).Status == 400,
+        "a photos-only link won't take a signature");
+    Srv("UPDATE testtag_captures SET created_at = '2001-01-01 00:00:00' WHERE note = 'one'");
+    await PhoneCapture.StartAsync(api, "tester-signature", "", PhoneCapture.Modes.Tester);
+    Check(N("SELECT COUNT(*) FROM testtag_captures WHERE note = 'one'") == 0, "relay copies older than 30 days are cleared");
+}
+
+Console.WriteLine("== photos and signatures sync with jobs (merged, not overwritten)");
+{
+    const string P = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    object Att(string id, string kind, string note = "") => new { id, kind, note, createdAt = "2026-09-25 01:00:00", dataUrl = P };
+    async Task<List<string>> ServerIds(string ext)
+    {
+        var pull = await TokenCall("api/services.php?resource=testtag&action=pull");
+        var j = pull.Json.GetProperty("data").EnumerateArray().First(x => Json.Str(x, "externalId") == ext);
+        return j.GetProperty("attachments").EnumerateArray().Select(a => Json.Str(a, "id")).OrderBy(x => x).ToList();
+    }
+    List<string> LocalIds(string id) => AttachmentStore.Get(AttachmentStore.JobOwner, id).Select(a => a.Id).OrderBy(x => x).ToList();
+
+    var mj = new { id = "att-job-0001", externalId = "att-job-0001", siteAddress = "Photo Site", testDate = "2026-09-25",
+        attachments = new[] { Att("p1", "photo", "Switchboard") }, items = new[] { new { description = "Heater", overallResult = "pass" } } };
+    await TokenCall("api/services.php?resource=testtag&action=push", new { job = mj });
+    await Sync();
+    Check(string.Join(",", LocalIds("att-job-0001")) == "p1" && AttachmentStore.Get("job", "att-job-0001")[0].Note == "Switchboard",
+        "a phone's photo reaches the suite");
+
+    // Suite: client signs on the laptop. Meanwhile the phone adds another photo.
+    var attLocal = Repository.GetJob("att-job-0001")!;
+    var list = AttachmentStore.Get("job", attLocal.Id);
+    list.Add(new Attachment { Id = "s1", Kind = "signature", Note = "Sam Sample", DataUrl = P });
+    Repository.SaveJob(attLocal);
+    AttachmentStore.SaveForJob(attLocal.Id, list);
+    await TokenCall("api/services.php?resource=testtag&action=push", new { job = new { mj.id, mj.externalId, mj.siteAddress, mj.testDate, mj.items,
+        attachments = new[] { Att("p1", "photo", "Switchboard"), Att("p2", "photo", "Faulty lead") } } });
+    await Sync();
+    Check(string.Join(",", await ServerIds("att-job-0001")) == "p1,p2,s1", "the suite's signature and the phone's new photo are both kept",
+        string.Join(",", await ServerIds("att-job-0001")));
+    Check(string.Join(",", LocalIds("att-job-0001")) == "p1,p2,s1", "and the suite picks up the phone's photo", string.Join(",", LocalIds("att-job-0001")));
+
+    // Removed in the suite -> removed on the server, nothing else touched.
+    list = AttachmentStore.Get("job", attLocal.Id).Where(a => a.Id != "p1").ToList();
+    Repository.SaveJob(Repository.GetJob(attLocal.Id)!);
+    AttachmentStore.SaveForJob(attLocal.Id, list);
+    await Sync();
+    Check(string.Join(",", await ServerIds("att-job-0001")) == "p2,s1", "a photo removed in the suite is removed on the website");
+
+    // An ordinary edit in the suite doesn't resend (or overwrite) the photos.
+    await TokenCall("api/services.php?resource=testtag&action=push", new { job = new { mj.id, mj.externalId, mj.siteAddress, mj.testDate, mj.items,
+        attachments = new[] { Att("p2", "photo"), Att("s1", "signature", "Sam Sample"), Att("p3", "photo") } } });
+    var ed = Repository.GetJob(attLocal.Id)!; ed.SiteAddress = "Photo Site (edited)"; Repository.SaveJob(ed);
+    AttachmentStore.SaveForJob(ed.Id, AttachmentStore.Get("job", ed.Id)); // unchanged list: not marked
+    await Sync();
+    Check(string.Join(",", await ServerIds("att-job-0001")) == "p2,p3,s1", "editing a job's details leaves the website's photos alone");
+    Check(LocalIds("att-job-0001").Contains("p3"), "and the new phone photo still comes down");
+
+    var badAtt = await TokenCall("api/services.php?resource=testtag&action=push", new { job = new { mj.id, mj.externalId, mj.siteAddress, mj.testDate, mj.items,
+        attachments = new object[] { Att("p2", "photo"), new { id = "x1", kind = "photo", dataUrl = "javascript:alert(1)" } } } });
+    Check(badAtt.Status == 200 && string.Join(",", await ServerIds("att-job-0001")) == "p2", "entries that aren't images are dropped");
+}
+
+Console.WriteLine("== photos on invoices, tester signature");
+{
+    const string P = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    AttachmentStore.Set(AttachmentStore.InvoiceOwner, "invAtts-a", new[]
+    {
+        new Attachment { Id = "a", Kind = "photo", DataUrl = P, Note = "Before" },
+        new Attachment { Id = "b", Kind = "photo", DataUrl = "not an image" },
+        new Attachment { Id = "c", Kind = "signature", DataUrl = P, Note = "Old", CreatedAt = "2026-09-01 10:00:00" },
+        new Attachment { Id = "d", Kind = "signature", DataUrl = P, Note = "New", CreatedAt = "2026-09-20 10:00:00" },
+    });
+    var invAtts = AttachmentStore.Get(AttachmentStore.InvoiceOwner, "invAtts-a");
+    Check(invAtts.Count == 3 && invAtts[0].Note == "Before", "invoice photos are kept, in order, and junk is skipped");
+    Check(AttachmentStore.LatestSignature(invAtts)?.Note == "New", "the latest signature is the one that prints");
+    AttachmentStore.TesterSignature = "http://example.test/x.png";
+    Check(AttachmentStore.TesterSignature == "", "the tester signature must be an image");
+    AttachmentStore.TesterSignature = P;
+    Check(AttachmentStore.TesterSignature == P, "tester signature saved");
+    Check(new Attachment { DataUrl = P }.Bytes()?.Length > 60 && new Attachment { DataUrl = "data:image/png;base64,@@" }.Bytes() is null, "image bytes decode (badAtt data gives none)");
+}
+
 Console.WriteLine("== parts: shop and link");
 var partsRes = await api.CallGetAsync("api/parts.php?action=list");
 var firstPart = PartsCatalogue.All().First();
@@ -467,6 +628,186 @@ Check(badUrl.Status == 400, "only web links are accepted as a product link");
 Check(PartsCatalogue.All().Where(p => p.Sku.Length == 7 && p.Supplier.Length == 0).All(p => p.SupplierOrGuess == "Bunnings"), "old parts with a Bunnings I/N count as Bunnings");
 var restock = PartsCatalogue.RestockText(PartsCatalogue.All());
 Check(restock.Contains("\nBunnings\n") && restock.Contains("\nJaycar\n"), "restock list is grouped by shop");
+
+Console.WriteLine("== invoice photos stored on the server (compressed, on disk)");
+{
+    // A real phone-sized photo: 3000x2000 JPEG made by PHP's GD.
+    var gen = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("php", new[] { "-r",
+        "$i=imagecreatetruecolor(3000,2000);for($x=0;$x<3000;$x+=6)for($y=0;$y<2000;$y+=6){imagefilledrectangle($i,$x,$y,$x+5,$y+5,imagecolorallocate($i,($x*7+$y)%256,($y*3)%256,($x+$y*5)%256));}ob_start();imagejpeg($i,null,97);echo base64_encode(ob_get_clean());" })
+        { RedirectStandardOutput = true })!;
+    var bigJpeg = "data:image/jpeg;base64," + (await gen.StandardOutput.ReadToEndAsync()).Trim();
+    await gen.WaitForExitAsync();
+    const string P = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    var filesDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(serverDb))!, "www", "testtag_uploads", "files");
+
+    var pInv = new Invoice { ClientId = alice.Id, Number = "INV-0100", IssuedDate = "2026-09-28", DueDate = "2026-10-12", Status = "draft",
+        LinesJson = InvoiceLines.Write(new[] { new InvoiceLines.Line("Repair", 1, 60) }), Subtotal = 60, Total = 60 };
+    Repository.SaveInvoice(pInv);
+    AttachmentStore.SaveForOwner("invoice", pInv.Id, new[]
+    {
+        new Attachment { Id = "ph-1", Kind = "photo", Note = "Before", DataUrl = bigJpeg },
+        new Attachment { Id = "ph-2", Kind = "photo", Note = "After", DataUrl = P },
+    });
+    var sr = await Sync();
+    Check(N("SELECT COUNT(*) FROM zs_files WHERE owner_type='invoice' AND owner_id=$1", pInv.Id) == 2,
+        "a draft invoice's photos go to the server (it doesn't wait for the invoice)", sr.Message);
+    var stored = Path.Combine(filesDir, S("SELECT filename FROM zs_files WHERE id='ph-1'"));
+    var bigBytes = Convert.FromBase64String(bigJpeg[(bigJpeg.IndexOf(',') + 1)..]).Length;
+    Check(File.Exists(stored) && new FileInfo(stored).Length < bigBytes / 3,
+        $"stored on disk and compressed ({bigBytes / 1024} KB -> {(File.Exists(stored) ? new FileInfo(stored).Length / 1024 : 0)} KB)");
+    var dims = S("SELECT bytes FROM zs_files WHERE id='ph-1'");
+    using (var probe = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("php", new[] { "-r", "$s=getimagesize($argv[1]);echo $s[0].'x'.$s[1];", stored }) { RedirectStandardOutput = true })!)
+    {
+        var wh = (await probe.StandardOutput.ReadToEndAsync()).Trim();
+        Check(wh == "1600x1067", "shrunk to 1600 px on the long side", wh);
+    }
+    Check(S("SELECT COUNT(*) FROM zs_files WHERE id='ph-1'") == "1" && !Directory.GetFiles(filesDir).Any(f => f.EndsWith(".png") && f.Contains("ph-1")), "one file per photo");
+
+    // Issue it: the server id is recorded against the photos.
+    pInv = Repository.GetInvoices().First(i => i.Id == pInv.Id); pInv.Status = "due"; Repository.SaveInvoice(pInv);
+    await Sync();
+    pInv = Repository.GetInvoices().First(i => i.Id == pInv.Id);
+    Check(!string.IsNullOrEmpty(pInv.ServerId) && N("SELECT COUNT(*) FROM zs_files WHERE owner_ref=$1", pInv.ServerId!) == 2,
+        "once issued, the photos are tied to the website's invoice too");
+
+    // Another device adds a photo; this PC removes one of its own. Both happen.
+    Check((await TokenCall("api/files.php?action=save", new { id = "ph-3", ownerType = "invoice", ownerId = pInv.Id, kind = "photo", note = "From the phone", dataUrl = P })).Status == 200,
+        "another device can add a photo with its token");
+    AttachmentStore.SaveForOwner("invoice", pInv.Id, AttachmentStore.Get("invoice", pInv.Id).Where(a => a.Id != "ph-2"));
+    await Sync();
+    var ids = string.Join(",", AttachmentStore.Get("invoice", pInv.Id).Select(a => a.Id).OrderBy(x => x));
+    Check(ids == "ph-1,ph-3" && N("SELECT COUNT(*) FROM zs_files WHERE owner_type='invoice'") == 2,
+        "removed here -> removed on the server; added elsewhere -> arrives here", ids);
+    Check(!Directory.GetFiles(filesDir).Any(f => Path.GetFileName(f).StartsWith("ph-2")), "the removed photo's file is deleted from disk");
+
+    // A new PC: the invoice comes down from the website with a new local id - its photos follow.
+    using (var lc = new SqliteConnection("Data Source=" + localDb))
+    {
+        lc.Open();
+        using var cmd = lc.CreateCommand();
+        cmd.CommandText = "DELETE FROM Invoices WHERE Id=$i; DELETE FROM Attachments WHERE OwnerId=$i; DELETE FROM AttachmentSync WHERE OwnerId=$i;";
+        cmd.Parameters.AddWithValue("$i", pInv.Id);
+        cmd.ExecuteNonQuery();
+    }
+    await Sync();
+    var invAgain = Repository.GetInvoices().FirstOrDefault(i => i.ServerId == pInv.ServerId);
+    var againAtts = invAgain is null ? new List<Attachment>() : AttachmentStore.Get("invoice", invAgain.Id);
+    Check(invAgain is not null && invAgain.Id != pInv.Id && againAtts.Count == 2 && againAtts.Any(a => a.Note == "Before" && a.DataUrl.StartsWith("data:image/jpeg")),
+        "on a new PC the invoice's photos come back with it", $"{againAtts.Count}");
+
+    var noAuth = await new HttpClient().GetAsync(baseUrl + "/api/files.php?action=list&ownerType=invoice");
+    Check((int)noAuth.StatusCode == 401, "the file store needs the admin or a token");
+    var notImg = await TokenCall("api/files.php?action=save", new { id = "x-1", ownerType = "invoice", ownerId = "abc", kind = "photo",
+        dataUrl = "data:image/png;base64," + Convert.ToBase64String("<?php phpinfo();"u8.ToArray()) });
+    Check(notImg.Status == 400, "something that isn't an image is refused");
+    var badId = await TokenCall("api/files.php?action=save", new { id = "../../x", ownerType = "invoice", ownerId = "abc", kind = "photo", dataUrl = P });
+    Check(badId.Status == 400, "a file id can't be a path");
+}
+
+Console.WriteLine("== one tester signature for every app");
+{
+    const string A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    string Sig(int shade)
+    {
+        var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("php", new[] { "-r",
+            $"$i=imagecreatetruecolor(300,100);imagefill($i,0,0,imagecolorallocate($i,255,255,255));imageline($i,10,50,290,{shade},imagecolorallocate($i,0,0,0));ob_start();imagepng($i);echo base64_encode(ob_get_clean());" })
+            { RedirectStandardOutput = true })!;
+        var b = p.StandardOutput.ReadToEnd().Trim(); p.WaitForExit();
+        return "data:image/png;base64," + b;
+    }
+    // (An earlier test set a signature here that hasn't been synced.)
+    await Sync();
+    var g1 = await TokenCall("api/files.php?action=tester_get");
+    var v1 = Json.Str(g1.Json.GetProperty("data"), "version");
+    Check(v1.Length > 0 && Json.Str(g1.Json.GetProperty("data"), "dataUrl").StartsWith("data:image/png"), "the suite's signature is stored on the server");
+
+    // Drawn on the phone (the web app sends it with its token).
+    var phoneSig = Sig(20);
+    var set = await TokenCall("api/files.php?action=tester_set", new { dataUrl = phoneSig });
+    Check(set.Status == 200 && Json.Str(set.Json.GetProperty("data"), "version") != v1, "the phone saves a new signature");
+    await Sync();
+    var suiteSig = AttachmentStore.TesterSignature;
+    Check(suiteSig.StartsWith("data:image/png") && suiteSig != A && !AttachmentStore.TesterSignatureDirty, "the suite picks up the phone's signature");
+
+    // Signed through a tester QR link: saved for everyone straight away.
+    var (ts, _) = await PhoneCapture.StartAsync(api, PhoneCapture.TesterRecord, "", PhoneCapture.Modes.Tester);
+    var ttok = ts!.Url[(ts.Url.IndexOf("t=") + 2)..];
+    var linkSig = Sig(90);
+    using (var ph = new HttpClient())
+        await ph.PostAsync(baseUrl + "/api/capture.php?action=upload", new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = ttok, ["kind"] = "signature", ["data"] = linkSig }));
+    await Sync();
+    Check(AttachmentStore.TesterSignature != suiteSig && AttachmentStore.TesterSignature.StartsWith("data:image/png"),
+        "a signature from a phone QR link becomes the signature everywhere");
+
+    // Changed in the suite -> sent; cleared -> cleared everywhere.
+    AttachmentStore.TesterSignature = Sig(60);
+    Check(AttachmentStore.TesterSignatureDirty, "a change here waits to be sent");
+    await Sync();
+    var g2 = await TokenCall("api/files.php?action=tester_get");
+    Check(!AttachmentStore.TesterSignatureDirty && Json.Str(g2.Json.GetProperty("data"), "version") == AttachmentStore.TesterSignatureVersion,
+        "sent, and the versions agree");
+    AttachmentStore.TesterSignature = "";
+    await Sync();
+    var g3 = await TokenCall("api/files.php?action=tester_get");
+    Check(Json.Str(g3.Json.GetProperty("data"), "dataUrl") == "" && Json.Str(g3.Json.GetProperty("data"), "version").Length > 0,
+        "clearing it clears it for every app");
+    Check((await TokenCall("api/files.php?action=delete", new { id = "tester-signature" })).Status == 400, "the signature can't be deleted as a plain file");
+}
+
+Console.WriteLine("== buying stock");
+{
+    await Sync();
+    var bp = PartsCatalogue.All().First(p => !p.Consumable);
+    var before = bp.OnHand;
+    var serverBefore = N("SELECT on_hand FROM testtag_parts WHERE id=$1", bp.Id);
+    Check(serverBefore == before, "start: suite and website agree on the count", $"{before} vs {serverBefore}");
+    PartsCatalogue.RecordPurchase(bp, 3, bp.Cost + 1.25);
+    var after = PartsCatalogue.All().First(p => p.Id == bp.Id);
+    Check(after.OnHand == before + 3 && Math.Abs(after.Cost - (bp.Cost + 1.25)) < 0.001 && after.CatalogueDirty,
+        "bought 3: in stock straight away, and the new price becomes the cost");
+
+    // Meanwhile the phone fits one (the website's count drops by one).
+    Srv("UPDATE testtag_parts SET on_hand = on_hand - 1 WHERE id = $1", bp.Id);
+    await Sync();
+    Check(N("SELECT on_hand FROM testtag_parts WHERE id=$1", bp.Id) == before - 1 + 3, "the website adds the 3 to its count (the phone's fit isn't undone)",
+        N("SELECT on_hand FROM testtag_parts WHERE id=$1", bp.Id).ToString());
+    Check(PartsCatalogue.All().First(p => p.Id == bp.Id).OnHand == before + 2, "and the suite shows the same");
+    Check(Math.Abs(Convert.ToDouble(Srv("SELECT cost FROM testtag_parts WHERE id=$1", bp.Id)) - (bp.Cost + 1.25)) < 0.001, "the new cost reaches the website");
+
+    var purchaseId = PartsCatalogue.Purchases().First().Id;
+    var dup = await TokenCall("api/parts.php?action=receive", new { id = purchaseId, partId = bp.Id, quantity = 3 });
+    Check(dup.Status == 200 && N("SELECT on_hand FROM testtag_parts WHERE id=$1", bp.Id) == before + 2, "a repeated send doesn't add it twice");
+
+    // Bought for a brand-new part (not on the website yet).
+    var np = new Part { Name = "Harness test fuse 5A", Cost = 2, Sell = 8, OnHand = 0, LowAt = 1, CatalogueDirty = true };
+    PartsCatalogue.Save(np);
+    PartsCatalogue.RecordPurchase(np, 10, 1.8, "Jaycar");
+    await Sync();
+    Check(N("SELECT on_hand FROM testtag_parts WHERE id=$1", np.Id) == 10 && PartsCatalogue.UnsentPurchases().Count == 0,
+        "a new part's first stock arrives with it");
+
+    // A pull while a purchase is still unsent keeps it counted.
+    var hp = PartsCatalogue.All().First(p => p.Id == bp.Id);
+    PartsCatalogue.RecordPurchase(hp, 2, hp.Cost);
+    var serverList = (await api.CallGetAsync("api/parts.php?action=list")).Rows().Select(r => new Part
+    {
+        Id = Json.Str(r, "id"), Sku = Json.Str(r, "sku"), Name = Json.Str(r, "name"), Cost = Json.Num(r, "cost"), Sell = Json.Num(r, "sell"),
+        OnHand = (int)Json.Num(r, "onHand"), LowAt = (int)Json.Num(r, "lowAt"), Active = Json.Bool(r, "active"),
+    }).ToList();
+    PartsCatalogue.ReplaceFromServer(serverList);
+    Check(PartsCatalogue.All().First(p => p.Id == bp.Id).OnHand == before + 4, "a refresh from the website before sending keeps the unsent purchase counted");
+    await Sync();
+    var hist = (await api.CallGetAsync("api/parts.php?action=purchases")).Rows().ToList();
+    Check(hist.Count == 3 && hist.Any(h => Json.Str(h, "supplier") == "Jaycar" && Json.Num(h, "quantity") == 10), "the website keeps the purchase history");
+    Check(PartsCatalogue.Purchases().Count == 3 && PartsCatalogue.Purchases().All(p => p.Sent), "and the suite's history shows them all counted");
+    var badQty = await TokenCall("api/parts.php?action=receive", new { id = "zz1", partId = bp.Id, quantity = 0 });
+    Check(badQty.Status == 400, "buying zero is refused");
+    Check(PartsCatalogue.SuggestedBuy(new Part { OnHand = 0, LowAt = 2 }) == 3 && PartsCatalogue.SuggestedBuy(new Part { OnHand = 5, LowAt = 2 }) == 1,
+        "suggested quantity gets back above the warning level");
+    Check(PartsCatalogue.BuyLink(new Part { Sku = "4430411", Name = "Plug" }).StartsWith("https://www.bunnings.com.au/search/products?q=4430411")
+        && PartsCatalogue.BuyLink(new Part { Url = "https://www.jaycar.com.au/p/PP4000" }) == "https://www.jaycar.com.au/p/PP4000",
+        "buy links go to the product page, or a search at its shop");
+}
 
 Console.WriteLine("== session expiry");
 // Lose the CSRF token server-side: the client should refresh and retry (419 path).
@@ -511,6 +852,20 @@ Check(bl.Any(l => l.Description.StartsWith("Repair part fitted") && l.Quantity =
     string.Join(" | ", bl.Select(l => $"{l.Description} x{l.Quantity}")));
 Check(bl[0].Rate == 120 && bl.Any(l => l.Description.StartsWith("Power tools") && l.Rate == 5) && bl.Any(l => l.Description.StartsWith("RCD") && l.Rate == 8),
     "call-out, power tool and RCD rates applied");
+
+Console.WriteLine("== Amazon");
+Check(Suppliers.SearchUrl("Amazon", "iec lead 2m") == "https://www.amazon.com.au/s?k=iec%20lead%202m", "Amazon search link");
+Check(Suppliers.ShopFor("https://www.amazon.com.au/dp/B0ABCDEF12") == "Amazon" && Suppliers.Names.Contains("Amazon"), "Amazon pages are recognised, and it's in the shop lists");
+Check(Suppliers.AmazonAsin("b0abcdef12", "") == "B0ABCDEF12" && Suppliers.AmazonAsin("", "https://www.amazon.com.au/Some-Lead/dp/B0ABCDEF12/ref=sr_1_3?x=1") == "B0ABCDEF12"
+      && Suppliers.AmazonAsin("4430411", "https://www.bunnings.com.au/x_p4430411") == "", "ASIN from the item no. or the link (not a Bunnings number)");
+Check(Suppliers.AmazonCartUrl(new[] { ("B0ABCDEF12", 2), ("B0ZZZZZZZ9", 1), ("B0ABCDEF12", 1), ("bad", 5) })
+      == "https://www.amazon.com.au/gp/aws/cart/add.html?ASIN.1=B0ABCDEF12&Quantity.1=3&ASIN.2=B0ZZZZZZZ9&Quantity.2=1",
+      "one cart link for all Amazon items, quantities combined", Suppliers.AmazonCartUrl(new[] { ("B0ABCDEF12", 2) }) ?? "");
+Check(Suppliers.AmazonCartUrl(new[] { ("", 1) }) is null, "no cart link when nothing has an ASIN");
+Check(new Part { Sku = "B0ABCDEF12" }.SupplierOrGuess == "Amazon" && PartsCatalogue.BuyLink(new Part { Sku = "B0ABCDEF12", Supplier = "Amazon" }) == "https://www.amazon.com.au/dp/B0ABCDEF12",
+      "a part with an ASIN counts as Amazon and links to its page");
+var az = Suppliers.Parse(System.Text.Json.JsonSerializer.Serialize(System.Text.Json.JsonSerializer.Serialize(new { name = "IEC Power Lead 2m", sku = "B0ABCDEF12", price = "$12.95", url = "https://www.amazon.com.au/dp/B0ABCDEF12", isProduct = true, priceGuessed = false })));
+Check(az is { Name: "IEC Power Lead 2m", Sku: "B0ABCDEF12", Price: 12.95, Supplier: "Amazon" }, "reads an Amazon page result (\"$12.95\")");
 
 Console.WriteLine("== stock when a part is fitted");
 {

@@ -17,10 +17,13 @@ namespace ZoltanStudios.Suite.Views;
 public sealed class CertificateWindow : Window
 {
     private readonly Job _job;
+    private readonly List<Attachment> _attachments;
 
-    public CertificateWindow(Job job)
+    /// <param name="attachments">The job's photos and signatures as edited (defaults to what's saved).</param>
+    public CertificateWindow(Job job, List<Attachment>? attachments = null)
     {
         _job = job;
+        _attachments = attachments ?? AttachmentStore.Get(AttachmentStore.JobOwner, job.Id);
         Title = "Certificate " + job.CertNumber;
         Width = 900;
         Height = 820;
@@ -149,6 +152,17 @@ public sealed class CertificateWindow : Window
         // ---- item table
         doc.Blocks.Add(ItemTable());
 
+        // ---- site photographs
+        var photos = _attachments.Where(a => !a.IsSignature).ToList();
+        if (photos.Count > 0)
+        {
+            doc.Blocks.Add(new Paragraph(new Run("Site Photographs"))
+            {
+                FontWeight = FontWeights.Bold, Margin = new Thickness(0, 14, 0, 6),
+            });
+            doc.Blocks.Add(DocImages.PhotoGrid(photos));
+        }
+
         // ---- declaration
         doc.Blocks.Add(new Paragraph(new Run("Statutory Declaration"))
         {
@@ -173,30 +187,19 @@ public sealed class CertificateWindow : Window
         sig.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
         var sg = new TableRowGroup();
         var sr = new TableRow();
-        sr.Cells.Add(SigCell(_job.TesterName, "Tester Signature & Date"));
-        sr.Cells.Add(SigCell("", "Client Representative Signature & Date"));
+        // Signatures are drawn on the lines when there are any; otherwise the
+        // lines stay blank for signing a printout by hand.
+        var tester = AttachmentStore.TesterSignature;
+        sr.Cells.Add(DocImages.SignatureCell(tester.Length > 0 ? tester : null, _job.TesterName,
+            tester.Length > 0 ? "Tester Signature — " + _job.TestDate : "Tester Signature & Date"));
+        var client = AttachmentStore.LatestSignature(_attachments);
+        sr.Cells.Add(DocImages.SignatureCell(client?.DataUrl, client is null ? "" : client.Note,
+            client is null ? "Client Representative Signature & Date" : "Client Representative — signed " + client.LocalDate));
         sg.Rows.Add(sr);
         sig.RowGroups.Add(sg);
         doc.Blocks.Add(sig);
 
         return doc;
-    }
-
-    private static TableCell SigCell(string name, string label)
-    {
-        var cell = new TableCell { Padding = new Thickness(0, 24, 20, 0) };
-        cell.Blocks.Add(new Paragraph
-        {
-            BorderBrush = Brushes.Gray,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Margin = new Thickness(0, 20, 0, 3),
-        });
-        cell.Blocks.Add(new Paragraph(new Run(name)) { FontSize = 11, Margin = new Thickness(0) });
-        cell.Blocks.Add(new Paragraph(new Run(label))
-        {
-            FontSize = 9, Foreground = Brushes.Gray, Margin = new Thickness(0),
-        });
-        return cell;
     }
 
     private Table Details()

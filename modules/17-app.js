@@ -60,12 +60,15 @@ function TestTagRecordsApp() {
       // from the ZoltanStudios server and merge (server version wins by id).
       try {
         const cfg = loadServerConfig();
-        if (cfg.token) {
+        // Hosted on the website a signed-in session is enough; before, a
+        // phone with no token never loaded the server's jobs at all.
+        if (cfg.token || cfg.session) {
+          const pending = await flushPendingDeletes(cfg);
+          // The shared tester signature (set here, in the suite, or on another phone).
+          await syncTesterSignature(cfg);
           const serverJobs = await pullJobsFromServer(cfg);
           if (serverJobs && !cancelled) {
-            const serverIds = new Set(serverJobs.map(j => j.id));
-            const localOnly = migratedCached.filter(j => !serverIds.has(j.id));
-            const mergedWithServer = [...serverJobs, ...localOnly];
+            const mergedWithServer = mergeServerJobs(migratedCached, serverJobs, pending);
             setJobs(mergedWithServer);
             await persistJobs(mergedWithServer);
           }
@@ -185,7 +188,21 @@ function TestTagRecordsApp() {
       }
     }
     const ok = await persistJobs(updated);
-    if (!ok) setError("Could not delete the job - please try again.");
+    if (!ok) {
+      setError("Could not delete the job - please try again.");
+      return;
+    }
+
+    // Delete the server copy too, or the next sync brings it back.
+    const cfg = loadServerConfig();
+    if (job && (cfg.token || cfg.session)) {
+      try {
+        await deleteJobOnServer(job, cfg);
+      } catch (e) {
+        queuePendingDelete(job);
+        setError("Deleted on this device. The server copy couldn't be deleted yet (" + (e && e.message ? e.message : "offline") + ") - it will be retried next time the app opens with a connection.");
+      }
+    }
   }, [jobs, folderHandle, folderStatus]);
 
   // Saves to Firestore + localStorage cache + optional local folder

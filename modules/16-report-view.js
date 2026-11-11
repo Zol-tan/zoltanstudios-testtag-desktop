@@ -210,7 +210,9 @@ function ReportView({
     className: "py-1.5 pr-2"
   }, /*#__PURE__*/React.createElement(ResultBadge, {
     result: item.overallResult
-  })))))), /*#__PURE__*/React.createElement("div", {
+  })))))), /*#__PURE__*/React.createElement(FixedRcdReportSection, {
+    job: job
+  }), /*#__PURE__*/React.createElement("div", {
     className: "border-t border-slate-200 pt-4 mb-8 text-xs text-slate-600 leading-relaxed"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-semibold text-slate-800 mb-2"

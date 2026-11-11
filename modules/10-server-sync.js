@@ -30,6 +30,7 @@ function jobToServerPayload(job) {
   return {
     jobType: job.jobType || "test_tag",
     generator: job.generator || null,
+    fixedRcd: job.fixedRcd || null,
     attachments: job.attachments || [],
     meggerEquipment: job.meggerEquipment || "",
     meggerCalibrationDate: job.meggerCalibrationDate || "",
@@ -83,6 +84,8 @@ function serverJobToLocal(j) {
   return {
     jobType: j.jobType || "test_tag",
     generator: j.generator || blankGenerator(),
+    // Older server copies have none; fixedRcdOf() fills the defaults on use.
+    fixedRcd: j.fixedRcd || null,
     attachments: j.attachments || [],
     meggerEquipment: j.meggerEquipment || "",
     meggerCalibrationDate: j.meggerCalibrationDate || "",
@@ -149,7 +152,10 @@ async function pullJobsFromServer(cfg) {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) return null;
-    return data.data.map(serverJobToLocal);
+    const list = data.data.map(serverJobToLocal);
+    // Jobs deleted on the server (from any device or the admin panel).
+    list.deleted = Array.isArray(data.deleted) ? data.deleted : [];
+    return list;
   };
 
   if (cfg.session) {
@@ -233,6 +239,115 @@ async function pushJobToServer(job, cfg) {
     throw new Error(data && data.error ? data.error : "Push failed (HTTP " + res.status + ").");
   }
   return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Deleting jobs on the server
+// ---------------------------------------------------------------------------
+// Deleting a job used to remove it from this device only, so the next pull
+// brought it straight back. Now the server copy is deleted too (session or
+// API token), and a delete made offline is queued and retried.
+const PENDING_DELETES_KEY = "zoltanstudios-pending-deletes-v1";
+function loadPendingDeletes() {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(PENDING_DELETES_KEY) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) {
+    return [];
+  }
+}
+function savePendingDeletes(list) {
+  try {
+    window.localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+function queuePendingDelete(job) {
+  const list = loadPendingDeletes().filter(d => d.id !== job.id);
+  list.push({
+    id: job.id,
+    serverId: job.serverId || "",
+    certNumber: job.certNumber || ""
+  });
+  savePendingDeletes(list);
+}
+async function deleteJobOnServer(job, cfg) {
+  const base = (cfg.url || "").replace(/\/+$/, "");
+  if (!base) throw new Error("No server URL configured.");
+  const body = JSON.stringify({
+    id: job.serverId || "",
+    externalId: job.id
+  });
+  const url = base + "/api/services.php?resource=testtag&action=delete";
+  const check = async res => {
+    let d = null;
+    try {
+      d = await res.json();
+    } catch (e) {}
+    if (!res.ok || !d || !d.ok) throw new Error(d && d.error ? d.error : "Delete failed (HTTP " + res.status + ").");
+    return d.data;
+  };
+  if (cfg.session) {
+    try {
+      const csrf = await getCsrf(base);
+      return await check(await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf
+        },
+        body
+      }));
+    } catch (sessionErr) {
+      if (!cfg.token) throw sessionErr;
+    }
+  }
+  if (!cfg.token) throw new Error("No API token configured.");
+  return await check(await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + cfg.token
+    },
+    body
+  }));
+}
+// Retries deletes that couldn't reach the server. Returns the ones still waiting.
+async function flushPendingDeletes(cfg) {
+  const pending = loadPendingDeletes();
+  if (pending.length === 0) return pending;
+  const left = [];
+  for (const d of pending) {
+    try {
+      await deleteJobOnServer(d, cfg);
+    } catch (e) {
+      left.push(d);
+    }
+  }
+  savePendingDeletes(left);
+  return left;
+}
+// Merges the server's job list into the local one: the server copy wins,
+// jobs deleted on the server are dropped here, and jobs deleted here but not
+// yet on the server stay deleted.
+function mergeServerJobs(localJobs, serverJobs, pending) {
+  const pendingIds = new Set((pending || []).map(d => d.id));
+  const tomb = new Set();
+  (serverJobs.deleted || []).forEach(d => {
+    if (d && d.id) tomb.add(d.id);
+    if (d && d.externalId) tomb.add(d.externalId);
+  });
+  const fromServer = serverJobs.filter(j => !pendingIds.has(j.id));
+  const serverIds = new Set(serverJobs.map(j => j.id));
+  const serverKeys = new Set(serverJobs.map(j => j.serverId).filter(Boolean));
+  const localOnly = localJobs.filter(j => {
+    if (serverIds.has(j.id) || pendingIds.has(j.id)) return false;
+    if (tomb.has(j.id) || j.serverId && tomb.has(j.serverId)) return false; // deleted elsewhere
+    // Came from the server once but isn't there now: deleted before tombstones existed.
+    if (j.serverId && !serverKeys.has(j.serverId)) return false;
+    return true; // never been on the server - keep it
+  });
+  return [...fromServer, ...localOnly];
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +513,64 @@ async function pollCaptures(jobId, since) {
   const d = await res.json();
   if (!d || !d.ok) return [];
   return d.data || [];
+}
+
+// ---------------------------------------------------------------------------
+// The tester's signature, shared through the server (api/files.php) with the
+// Business Suite and every phone: draw it once anywhere and it's used
+// everywhere. "signatureVersion" is the server's version last seen;
+// "signaturePending" means a change here still has to be sent.
+// ---------------------------------------------------------------------------
+async function filesCall(cfg, action, body) {
+  const base = (cfg.url || '').replace(/\/+$/, '');
+  if (!base) throw new Error('No server configured.');
+  const url = base + '/api/files.php?action=' + action;
+  const go = async (useSession) => {
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (useSession) { if (body) headers['X-CSRF-Token'] = await getCsrf(base); }
+    else headers['Authorization'] = 'Bearer ' + cfg.token;
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      credentials: useSession ? 'include' : 'omit',
+      cache: 'no-store',
+      headers: headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let d = null;
+    try { d = await res.json(); } catch (e) {}
+    if (!res.ok || !d || !d.ok) throw new Error((d && d.error) || ('HTTP ' + res.status));
+    return d.data || {};
+  };
+  if (cfg.session) {
+    try { return await go(true); } catch (e) { if (!cfg.token) throw e; }
+  }
+  if (!cfg.token) throw new Error('Not connected to the server.');
+  return go(false);
+}
+
+async function syncTesterSignature(cfg) {
+  if (!cfg || !(cfg.token || cfg.session)) return false;
+  const s = loadTesterSettings() || {};
+  const keep = (d) => saveTesterSettings(Object.assign({}, loadTesterSettings() || {}, {
+    signature: d.dataUrl || '', signatureVersion: d.version || '', signaturePending: false,
+  }));
+  try {
+    if (s.signaturePending) {
+      keep(await filesCall(cfg, 'tester_set', { dataUrl: s.signature || '' }));
+      return true;
+    }
+    const d = await filesCall(cfg, 'tester_get');
+    if (!d.version) {
+      // Nothing on the server yet: give it this device's signature.
+      if (s.signature) { keep(await filesCall(cfg, 'tester_set', { dataUrl: s.signature })); return true; }
+      return false;
+    }
+    if (d.version === s.signatureVersion) return false;
+    keep(d);
+    return true;
+  } catch (e) {
+    return false; // offline, or a server without files.php: this device's copy stands
+  }
 }
 
 // Render a QR code to an SVG data URI using the vendored generator.

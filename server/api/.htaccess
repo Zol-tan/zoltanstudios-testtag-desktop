@@ -1,0 +1,26 @@
+# Block direct browser access to internal files.
+# Endpoints (auth.php, data.php, services.php, parts.php, files.php, capture.php...) stay reachable.
+# Every _*.php is a library file (_lib, _mail, _testtag, _parts, _files) - never a page.
+<FilesMatch "^(_.*|config)\.php$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Schema files, docs and logs are not for public consumption (PHP writes its log as "error_log").
+<FilesMatch "(\.(sql|md|log|txt)|^error_log)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# No directory listing
+Options -Indexes

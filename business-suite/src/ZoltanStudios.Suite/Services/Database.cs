@@ -68,6 +68,9 @@ public static class Database
         AddColumnIfMissing(c, "Parts", "Consumable", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(c, "Appointments", "Status", "TEXT NOT NULL DEFAULT 'confirmed'");
 
+        // 0.5: photos and signatures, for jobs, invoices and the tester.
+        AttachmentStore.EnsureSchema(c);
+
         // 0.1 wrote the "sent" invoice status, which the server rejects.
         using var fix = c.CreateCommand();
         fix.CommandText = "UPDATE Invoices SET Status = 'due' WHERE Status = 'sent'";

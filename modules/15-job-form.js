@@ -822,7 +822,12 @@ function JobFormView({
     size: 16
   }), " Add item"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-400 mt-4 border-t border-slate-100 pt-3"
-  }, "Pass/fail suggestions use general thresholds (earth continuity ≤ 1Ω, insulation resistance ≥ 1MΩ, leakage current ≤ 5mA) as a starting point only. Always apply your own professional judgement and the current AS/NZS 3760 requirements — use \"Override\" for any item where your assessment differs.")), job.items.length > 0 && (() => {
+  }, "Pass/fail suggestions use general thresholds (earth continuity ≤ 1Ω, insulation resistance ≥ 1MΩ, leakage current ≤ 5mA) as a starting point only. Always apply your own professional judgement and the current AS/NZS 3760 requirements — use \"Override\" for any item where your assessment differs.")), /*#__PURE__*/React.createElement(FixedRcdPanel, {
+    job: job,
+    onChange: v => update({
+      fixedRcd: v
+    })
+  }), (job.items.length > 0 || fixedRcdSummary(job).tested > 0) && (() => {
     const counts = {
       standard: 0,
       power_tool: 0,
@@ -842,7 +847,9 @@ function JobFormView({
     const partsTotal = partsTotalFor(job.items, partsCat);
     const partsCount = job.items.filter(i => { const p = partById(partsCat, i.partId); return p && !p.consumable; }).length;
     const itemTotal = chargeableStd * volumeRate + counts.power_tool * 5.00 + counts.rcd * 8.00 + counts.microwave * 12.00;
-    const estimatedTotal = callOut + itemTotal + partsTotal;
+    const fixedRcdCount = fixedRcdSummary(job).tested;
+    const fixedRcdTotal = fixedRcdTotalPrice(job);
+    const estimatedTotal = callOut + itemTotal + partsTotal + fixedRcdTotal;
     return /*#__PURE__*/React.createElement("div", {
       className: "bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm"
     }, /*#__PURE__*/React.createElement("div", {
@@ -851,7 +858,7 @@ function JobFormView({
       className: "font-semibold text-slate-700"
     }, "Estimated invoice"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-4 flex-wrap text-slate-600 text-xs"
-    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$120")), chargeableStd > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", chargeableStd, " after first 20: ", /*#__PURE__*/React.createElement("strong", null, "$", (chargeableStd * volumeRate).toFixed(2))), partsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Parts ×", partsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", partsTotal.toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * 5.00).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * 8.00).toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * 12.00).toFixed(2))), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$120")), chargeableStd > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", chargeableStd, " after first 20: ", /*#__PURE__*/React.createElement("strong", null, "$", (chargeableStd * volumeRate).toFixed(2))), partsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Parts ×", partsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", partsTotal.toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * 5.00).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * 8.00).toFixed(2))), fixedRcdCount > 0 && /*#__PURE__*/React.createElement("span", null, "Fixed RCDs ×", fixedRcdCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", fixedRcdTotal.toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * 12.00).toFixed(2))), /*#__PURE__*/React.createElement("span", {
       className: "font-bold text-blue-700"
     }, "Total: $", estimatedTotal.toFixed(2)))), totalItems >= 100 && /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-amber-600 mt-1"

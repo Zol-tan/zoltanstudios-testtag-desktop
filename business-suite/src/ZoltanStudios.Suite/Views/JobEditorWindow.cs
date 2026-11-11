@@ -27,10 +27,15 @@ public sealed class JobEditorWindow : Window
     private readonly ComboBox _environment = new();
     private readonly TextBlock _summary = new();
 
+    // Photos and signatures: edited in their own dialog, saved with the job.
+    private List<Attachment> _attachments;
+    private Button _attButton = null!;
+
     public JobEditorWindow(Job? existing = null)
     {
         _job = existing ?? NewJob();
         _items = new ObservableCollection<Item>(_job.Items);
+        _attachments = existing is null ? new() : AttachmentStore.Get(AttachmentStore.JobOwner, _job.Id);
 
         Title = existing is null ? "New Job" : "Job " + _job.CertNumber;
         Width = 1150;
@@ -93,6 +98,9 @@ public sealed class JobEditorWindow : Window
         buttons.Children.Add(Button("Duplicate Item", (_, _) => DuplicateItem()));
         buttons.Children.Add(Button("Remove Item", (_, _) => RemoveItem()));
         buttons.Children.Add(new Separator { Width = 16, Opacity = 0 });
+        _attButton = Button("", (_, _) => EditAttachments());
+        UpdateAttButton();
+        buttons.Children.Add(_attButton);
         buttons.Children.Add(Button("Certificate…", (_, _) => ShowCertificate()));
         buttons.Children.Add(Button("Cancel", (_, _) => Close()));
         buttons.Children.Add(Button("Save", (_, _) => Save(), primary: true));
@@ -478,6 +486,7 @@ public sealed class JobEditorWindow : Window
         ApplyForm();
 
         Repository.SaveJob(_job);
+        AttachmentStore.SaveForJob(_job.Id, _attachments);
 
         // Rewrite this job's parts usage from scratch. Re-saving a job would
         // otherwise count the same part out of stock twice.
@@ -498,6 +507,30 @@ public sealed class JobEditorWindow : Window
         Close();
     }
 
+    private void UpdateAttButton()
+    {
+        var photos = _attachments.Count(a => !a.IsSignature);
+        var signed = _attachments.Any(a => a.IsSignature);
+        _attButton.Content = "Photos & Signature" + (photos > 0 || signed
+            ? $" ({photos} photo{(photos == 1 ? "" : "s")}{(signed ? ", signed" : "")})…" : "…");
+    }
+
+    private string ClientName()
+    {
+        var i = _client.SelectedIndex;
+        return i > 0 ? _clients[i - 1].Name : "";
+    }
+
+    private void EditAttachments()
+    {
+        var label = $"Job {_cert.Text.Trim()}" + (_site.Text.Trim().Length > 0 ? " - " + _site.Text.Trim() : "");
+        var panel = new AttachmentsPanel(_job.Id, label, _attachments, ClientName());
+        var dlg = new AttachmentsWindow("Photos & Signature - " + label, panel) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        _attachments = panel.Items;
+        UpdateAttButton();
+    }
+
     private void ShowCertificate()
     {
         ApplyForm();
@@ -509,7 +542,7 @@ public sealed class JobEditorWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        new CertificateWindow(_job) { Owner = this }.ShowDialog();
+        new CertificateWindow(_job, _attachments) { Owner = this }.ShowDialog();
     }
 
     // ------------------------------------------------------------ environments

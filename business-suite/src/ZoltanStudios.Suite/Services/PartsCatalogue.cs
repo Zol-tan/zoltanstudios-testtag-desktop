@@ -27,9 +27,10 @@ public sealed class Part
     /// <summary>The product page, for re-ordering and checking the price.</summary>
     public string Url { get; set; } = "";
 
-    /// <summary>The supplier, or Bunnings for an old part with a 7-digit I/N and none recorded.</summary>
+    /// <summary>The supplier, or a guess from the item number: 7 digits is Bunnings, B0 + 8 is an Amazon ASIN.</summary>
     public string SupplierOrGuess => Supplier.Length > 0 ? Supplier
-        : System.Text.RegularExpressions.Regex.IsMatch(Sku ?? "", @"^\d{7}$") ? "Bunnings" : "";
+        : System.Text.RegularExpressions.Regex.IsMatch(Sku ?? "", @"^\d{7}$") ? "Bunnings"
+        : System.Text.RegularExpressions.Regex.IsMatch(Sku ?? "", @"^B0[A-Z0-9]{8}$") ? "Amazon" : "";
 
     /// <summary>Name, price or settings edited here and not yet sent to the server.</summary>
     public bool CatalogueDirty { get; set; }
@@ -131,6 +132,18 @@ public static class PartsCatalogue
                 UsedAt    TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS IX_PartsUsed_Job ON PartsUsed(JobId);
+
+            -- Stock bought. Sent = 1 once the server has added it to its count.
+            CREATE TABLE IF NOT EXISTS PartPurchases (
+                Id          TEXT PRIMARY KEY,
+                PartId      TEXT NOT NULL,
+                PartName    TEXT NOT NULL DEFAULT '',
+                Supplier    TEXT NOT NULL DEFAULT '',
+                Quantity    INTEGER NOT NULL DEFAULT 1,
+                UnitCost    REAL NOT NULL DEFAULT 0,
+                PurchasedAt TEXT NOT NULL DEFAULT '',
+                Sent        INTEGER NOT NULL DEFAULT 0
+            );
             """;
         cmd.ExecuteNonQuery();
         Database.AddColumnIfMissing(c, "Parts", "Consumable", "INTEGER NOT NULL DEFAULT 0");
@@ -218,7 +231,7 @@ public static class PartsCatalogue
             sb.Append("\n").Append(g.Key).Append('\n');
             foreach (var p in g)
                 sb.Append("  ").Append((p.Sku ?? "").PadRight(9)).Append(p.Name)
-                  .Append("  -  ").Append(p.OnHand).Append(" left, buy ").Append(Math.Max(1, p.LowAt + 1 - p.OnHand)).Append('\n');
+                  .Append("  -  ").Append(p.OnHand).Append(" left, buy ").Append(SuggestedBuy(p)).Append('\n');
         }
         return sb.ToString();
     }
@@ -279,6 +292,11 @@ public static class PartsCatalogue
     public static void ReplaceFromServer(List<Part> server)
     {
         var local = All(includeInactive: true);
+        // Stock bought here that the server hasn't counted yet stays counted here.
+        var unsent = UnsentPurchases().GroupBy(p => p.PartId).ToDictionary(g => g.Key, g => g.Sum(p => p.Quantity));
+        int Pending(Part? mine, string serverId)
+            => (unsent.TryGetValue(serverId, out var a) ? a : 0)
+             + (mine is not null && mine.Id != serverId && unsent.TryGetValue(mine.Id, out var b) ? b : 0);
         var serverIds = new HashSet<string>(server.Select(p => p.Id));
         var kept = new HashSet<string>();
 
@@ -304,6 +322,7 @@ public static class PartsCatalogue
                 // Same part, different id: adopt the server's id everywhere.
                 Exec("UPDATE Items SET PartId = $new WHERE PartId = $old", ("$new", sp.Id), ("$old", mine.Id));
                 Exec("UPDATE PartsUsed SET PartId = $new WHERE PartId = $old", ("$new", sp.Id), ("$old", mine.Id));
+                Exec("UPDATE PartPurchases SET PartId = $new WHERE PartId = $old", ("$new", sp.Id), ("$old", mine.Id));
                 Exec("DELETE FROM Parts WHERE Id = $old", ("$old", mine.Id));
             }
 
@@ -320,7 +339,7 @@ public static class PartsCatalogue
                 // An older server without these columns sends nothing: keep ours.
                 Supplier = mine is { CatalogueDirty: true } || sp.Supplier.Length == 0 ? mine?.Supplier ?? "" : sp.Supplier,
                 Url = mine is { CatalogueDirty: true } || sp.Url.Length == 0 ? mine?.Url ?? "" : sp.Url,
-                OnHand = mine is { StockDirty: true } ? mine.OnHand : sp.OnHand,
+                OnHand = mine is { StockDirty: true } ? mine.OnHand : sp.OnHand + Pending(mine, sp.Id),
                 CatalogueDirty = mine?.CatalogueDirty ?? false,
                 StockDirty = mine?.StockDirty ?? false,
             };
@@ -349,6 +368,97 @@ public static class PartsCatalogue
 
         tx.Commit();
     }
+
+    // ------------------------------------------------------------ purchases
+
+    public sealed record Purchase(string Id, string PartId, string PartName, string Supplier, int Quantity,
+        double UnitCost, string PurchasedAt, bool Sent)
+    {
+        public double Total => Math.Round(Quantity * UnitCost, 2);
+        public string Date => PurchasedAt.Length >= 10 ? PurchasedAt[..10] : PurchasedAt;
+    }
+
+    /// <summary>
+    /// Stock bought: adds to the count now, and to the server's count on the
+    /// next sync (added, never set, so parts fitted elsewhere meanwhile still
+    /// come off). A different price paid updates the part's cost.
+    /// </summary>
+    public static Purchase RecordPurchase(Part part, int quantity, double unitCost, string? supplier = null)
+    {
+        if (quantity < 1) throw new ArgumentOutOfRangeException(nameof(quantity), "Buy at least one.");
+        unitCost = Math.Max(0, Math.Round(unitCost, 2));
+        var p = new Purchase(Guid.NewGuid().ToString("N"), part.Id, part.Name,
+            supplier ?? part.SupplierOrGuess, quantity, unitCost, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), false);
+
+        using var c = Database.Open();
+        using var tx = c.BeginTransaction();
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO PartPurchases (Id,PartId,PartName,Supplier,Quantity,UnitCost,PurchasedAt,Sent)
+                VALUES ($id,$p,$n,$s,$q,$c,$d,0)
+                """;
+            cmd.Parameters.AddWithValue("$id", p.Id);
+            cmd.Parameters.AddWithValue("$p", p.PartId);
+            cmd.Parameters.AddWithValue("$n", p.PartName);
+            cmd.Parameters.AddWithValue("$s", p.Supplier);
+            cmd.Parameters.AddWithValue("$q", p.Quantity);
+            cmd.Parameters.AddWithValue("$c", p.UnitCost);
+            cmd.Parameters.AddWithValue("$d", p.PurchasedAt);
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = c.CreateCommand())
+        {
+            // A new price paid becomes the part's cost (sent with the catalogue).
+            cmd.CommandText = """
+                UPDATE Parts SET OnHand = OnHand + $q,
+                    CatalogueDirty = CASE WHEN $c > 0 AND abs(Cost - $c) > 0.004 THEN 1 ELSE CatalogueDirty END,
+                    Cost = CASE WHEN $c > 0 THEN $c ELSE Cost END
+                WHERE Id = $p
+                """;
+            cmd.Parameters.AddWithValue("$q", quantity);
+            cmd.Parameters.AddWithValue("$c", unitCost);
+            cmd.Parameters.AddWithValue("$p", part.Id);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+        return p;
+    }
+
+    public static List<Purchase> Purchases(bool unsentOnly = false)
+    {
+        var list = new List<Purchase>();
+        using var c = Database.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT * FROM PartPurchases" + (unsentOnly ? " WHERE Sent = 0" : "") + " ORDER BY PurchasedAt DESC, Id";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new Purchase(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4),
+                r.GetDouble(5), r.GetString(6), r.GetInt32(7) == 1));
+        return list;
+    }
+
+    public static List<Purchase> UnsentPurchases() => Purchases(unsentOnly: true);
+
+    /// <param name="sendCountInstead">For a server without "receive": send the counted stock instead.</param>
+    public static void MarkPurchaseSent(string id, bool sendCountInstead = false)
+    {
+        using var c = Database.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "UPDATE PartPurchases SET Sent = 1 WHERE Id = $id;"
+            + (sendCountInstead ? " UPDATE Parts SET StockDirty = 1 WHERE Id = (SELECT PartId FROM PartPurchases WHERE Id = $id);" : "");
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>How many to buy to get back above the warning level (at least one).</summary>
+    public static int SuggestedBuy(Part p) => Math.Max(1, p.LowAt + 1 - p.OnHand);
+
+    /// <summary>The product page, or a search for it at its shop.</summary>
+    public static string BuyLink(Part p)
+        => p.Url.Length > 0 ? p.Url
+         : p.SupplierOrGuess == "Amazon" && Suppliers.AmazonAsin(p.Sku, "") is { Length: > 0 } asin ? "https://www.amazon.com.au/dp/" + asin
+         : Suppliers.SearchUrl(p.SupplierOrGuess.Length > 0 ? p.SupplierOrGuess : "Bunnings", p.Sku.Length > 0 ? p.Sku : p.Name);
 
     // ------------------------------------------------------------ usage
 

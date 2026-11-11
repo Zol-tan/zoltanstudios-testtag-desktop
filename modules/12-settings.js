@@ -28,6 +28,7 @@ function effectiveTester() {
     license: s.license || DEFAULT_TESTER.license,
     testEquipment: s.testEquipment || "Wavecom TnT RCD",
     testEquipmentCalibrationDate: s.testEquipmentCalibrationDate || "",
+    testEquipmentSerial: s.testEquipmentSerial || "",
     meggerEquipment: s.meggerEquipment || "",
     meggerCalibrationDate: s.meggerCalibrationDate || "",
     // Drawn once in Tester Defaults and applied to every certificate, so the

@@ -471,14 +471,60 @@ public sealed class TesterDefaultsWindow : EditorDialog
     private readonly TextBox _calibrated = Forms.Tb(Repository.GetSetting("CalibrationDate", ""));
     private readonly TextBox _tag = Forms.Tb(Repository.GetSetting("LastTagStart", "T-001"));
 
-    public TesterDefaultsWindow() : base("Tester Defaults", 560, 470)
+    // The tester's signature, drawn onto every certificate's tester line.
+    private string _signature = AttachmentStore.TesterSignature;
+    private readonly Image _sigImage = new() { Height = 70, MaxWidth = 300, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly TextBlock _sigNone = new() { Text = "No signature yet - certificates get a blank line to sign by hand.", Foreground = Forms.Res("FaintText"), VerticalAlignment = VerticalAlignment.Center };
+
+    public TesterDefaultsWindow() : base("Tester Defaults", 600, 640)
     {
         FormPanel.Children.Add(Forms.Grid(2, Forms.Field("Tester name", _name), Forms.Field("Licence / certificate no.", _licence)));
         FormPanel.Children.Add(Forms.Grid(2, Forms.Field("Test equipment", _equipment), Forms.Field("Calibration date (yyyy-mm-dd)", _calibrated)));
         FormPanel.Children.Add(Forms.Field("Next tag number on the roll", _tag));
         FormPanel.Children.Add(Forms.Note("New jobs start with these. Saving a job also updates the tester details and where the tag roll is up to."));
+
+        FormPanel.Children.Add(new TextBlock { Text = "Your signature", FontSize = 11, Foreground = Forms.Res("MutedText"), Margin = new Thickness(0, 10, 0, 3) });
+        FormPanel.Children.Add(new Border
+        {
+            Background = Brushes.White,
+            BorderBrush = Forms.Res("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10),
+            MinHeight = 90,
+            Child = new Grid { Children = { _sigImage, _sigNone } },
+        });
+        var sigBar = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        sigBar.Children.Add(Forms.Btn("Sign Here…", (_, _) => SignHere(), glyph: Glyphs.Pen));
+        sigBar.Children.Add(Forms.Btn("Sign on My Phone…", (_, _) => SignOnPhone(), glyph: Glyphs.Phone));
+        sigBar.Children.Add(Forms.Btn("Remove", (_, _) => { _signature = ""; ShowSignature(); }, glyph: Ui.GDelete));
+        FormPanel.Children.Add(sigBar);
+        FormPanel.Children.Add(Forms.Note("Goes on the tester line of every certificate. Kept on your website, so the Test & Tag app on your phone uses the same one - set it there, here, or with Sign on My Phone, and the others pick it up."));
+        ShowSignature();
+
         ButtonBar.Children.Add(Forms.Btn("Cancel", (_, _) => Close()));
         ButtonBar.Children.Add(Forms.Btn("Save", (_, _) => Save(), primary: true, glyph: Ui.GSave));
+    }
+
+    private void ShowSignature()
+    {
+        _sigImage.Source = _signature.Length > 0 ? ImageTools.FromDataUrl(_signature) : null;
+        _sigNone.Visibility = _sigImage.Source is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SignHere()
+    {
+        var dlg = new SignaturePadWindow("Your Signature", "Sign as you would on a certificate.", askName: false) { Owner = this };
+        if (dlg.ShowDialog() == true && dlg.Result is not null) { _signature = dlg.Result.DataUrl; ShowSignature(); }
+    }
+
+    private void SignOnPhone()
+    {
+        var dlg = new PhoneCaptureWindow(PhoneCapture.TesterRecord, "Tester signature for certificates", PhoneCapture.Modes.Tester,
+            Array.Empty<string>()) { Owner = this };
+        dlg.ShowDialog();
+        var sig = AttachmentStore.LatestSignature(dlg.Received);
+        if (sig is not null) { _signature = sig.DataUrl; ShowSignature(); }
     }
 
     private void Save()
@@ -491,6 +537,7 @@ public sealed class TesterDefaultsWindow : EditorDialog
         Repository.SetSetting("TestEquipment", _equipment.Text.Trim());
         Repository.SetSetting("CalibrationDate", cal);
         if (_tag.Text.Trim().Length > 0) Repository.SetSetting("LastTagStart", _tag.Text.Trim());
+        AttachmentStore.TesterSignature = _signature;
         DialogResult = true;
     }
 }

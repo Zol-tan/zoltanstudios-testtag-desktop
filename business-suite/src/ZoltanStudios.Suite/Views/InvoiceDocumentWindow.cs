@@ -17,9 +17,12 @@ public sealed class InvoiceDocumentWindow : Window
     private readonly List<InvoiceLine> _lines;
     private readonly string _clientName;
     private readonly Rates _rates;
+    private readonly List<Attachment> _attachments;
 
-    public InvoiceDocumentWindow(Invoice invoice, List<InvoiceLine> lines, string clientName, Rates rates)
+    public InvoiceDocumentWindow(Invoice invoice, List<InvoiceLine> lines, string clientName, Rates rates,
+        List<Attachment>? attachments = null)
     {
+        _attachments = attachments ?? AttachmentStore.Get(AttachmentStore.InvoiceOwner, invoice.Id);
         _invoice = invoice;
         _lines = lines;
         _clientName = clientName;
@@ -201,6 +204,31 @@ public sealed class InvoiceDocumentWindow : Window
             Foreground = Brushes.Gray,
             Margin = new Thickness(0, 20, 0, 0),
         });
+
+        var photos = _attachments.Where(a => !a.IsSignature).ToList();
+        if (photos.Count > 0)
+        {
+            doc.Blocks.Add(new Paragraph(new Run("Photos"))
+            { FontWeight = FontWeights.Bold, Margin = new Thickness(0, 18, 0, 6) });
+            doc.Blocks.Add(DocImages.PhotoGrid(photos));
+        }
+
+        // A signature on an invoice is the client accepting the work.
+        var sig = AttachmentStore.LatestSignature(_attachments);
+        if (sig is not null)
+        {
+            var t2 = new Table { CellSpacing = 0, Margin = new Thickness(0, 10, 0, 0) };
+            t2.Columns.Add(new TableColumn { Width = new GridLength(320) });
+            t2.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
+            var g2 = new TableRowGroup();
+            var r2 = new TableRow();
+            r2.Cells.Add(DocImages.SignatureCell(sig.DataUrl, sig.Note.Length > 0 ? sig.Note : _clientName,
+                "Work accepted — signed " + sig.LocalDate));
+            r2.Cells.Add(new TableCell(new Paragraph()));
+            g2.Rows.Add(r2);
+            t2.RowGroups.Add(g2);
+            doc.Blocks.Add(t2);
+        }
 
         return doc;
     }

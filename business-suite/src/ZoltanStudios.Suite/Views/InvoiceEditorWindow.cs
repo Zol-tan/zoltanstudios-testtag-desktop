@@ -38,6 +38,10 @@ public sealed class InvoiceEditorWindow : Window
     private readonly TextBlock _totals = new();
     private DataGrid _grid = null!;
 
+    // Photos (and a client signature, if wanted); stored on the server on the next sync.
+    private List<Attachment> _attachments = new();
+    private Button _attButton = null!;
+
     public InvoiceEditorWindow(Invoice? existing = null, Job? fromJob = null, bool pickJob = false)
     {
         _invoice = existing ?? new Invoice
@@ -47,6 +51,7 @@ public sealed class InvoiceEditorWindow : Window
             DueDate = DateTime.Today.AddDays(14).ToString("yyyy-MM-dd"),
         };
 
+        if (existing is not null) _attachments = AttachmentStore.Get(AttachmentStore.InvoiceOwner, _invoice.Id);
         Title = existing is null ? "New Invoice" : "Invoice " + _invoice.Number;
         Width = 900;
         Height = 660;
@@ -100,6 +105,9 @@ public sealed class InvoiceEditorWindow : Window
             if (_grid.SelectedItem is InvoiceLine l) _lines.Remove(l);
             Recalculate();
         }));
+        _attButton = Btn("", (_, _) => EditAttachments());
+        UpdateAttButton();
+        buttons.Children.Add(_attButton);
         buttons.Children.Add(Btn("Print...", (_, _) => Print()));
         buttons.Children.Add(Btn("Cancel", (_, _) => Close()));
         buttons.Children.Add(Btn("Save", (_, _) => Save(), primary: true));
@@ -342,6 +350,28 @@ public sealed class InvoiceEditorWindow : Window
     private void Warn(string message)
         => MessageBox.Show(this, message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
 
+    private void UpdateAttButton()
+    {
+        var photos = _attachments.Count(a => !a.IsSignature);
+        var signed = _attachments.Any(a => a.IsSignature);
+        _attButton.Content = "Photos" + (photos > 0 || signed
+            ? $" ({photos}{(signed ? ", signed" : "")})..." : "...");
+    }
+
+    private void EditAttachments()
+    {
+        var label = "Invoice " + _number.Text.Trim();
+        var client = _client.SelectedIndex > 0 ? _clients[_client.SelectedIndex - 1].Name : "";
+        var panel = new AttachmentsPanel(PhoneCapture.InvoiceRecord(_invoice.Id), label, _attachments, client,
+            fromJob: () => string.IsNullOrEmpty(_invoice.JobId)
+                ? new List<Attachment>()
+                : AttachmentStore.Get(AttachmentStore.JobOwner, _invoice.JobId));
+        var dlg = new AttachmentsWindow("Photos - " + label, panel) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        _attachments = panel.Items;
+        UpdateAttButton();
+    }
+
     private void Print()
     {
         Recalculate();
@@ -351,7 +381,7 @@ public sealed class InvoiceEditorWindow : Window
         _invoice.Notes = _notes.Text.Trim();
 
         var clientName = _client.SelectedIndex > 0 ? _client.SelectedItem as string ?? "" : "";
-        new InvoiceDocumentWindow(_invoice, _lines.ToList(), clientName, _rates) { Owner = this }.ShowDialog();
+        new InvoiceDocumentWindow(_invoice, _lines.ToList(), clientName, _rates, _attachments) { Owner = this }.ShowDialog();
     }
 
     // ------------------------------------------------------------- load / save
@@ -409,6 +439,7 @@ public sealed class InvoiceEditorWindow : Window
             _invoice.LinesJson = InvoiceLines.Write(_lines.Select(l => new InvoiceLines.Line(l.Description, l.Quantity, l.Rate)));
         }
         Repository.SaveInvoice(_invoice);
+        AttachmentStore.SaveForOwner(AttachmentStore.InvoiceOwner, _invoice.Id, _attachments);
 
         DialogResult = true;
         Close();

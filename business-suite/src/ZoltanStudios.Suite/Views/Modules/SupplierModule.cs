@@ -197,7 +197,16 @@ public sealed class SupplierModule : UserControl
         {
             s.Children.Add(Forms.Note($"You carry this: {existing.Name} — cost ${existing.Cost:0.00}, {existing.OnHand} in stock.",
                 p.Price is { } np && Math.Abs(np - existing.Cost) > 0.004 ? "WarnBrush" : "OkBrush"));
-            s.Children.Add(Forms.Btn("Update My Part From This Page", (_, _) => UpdatePart(existing, p), primary: true, glyph: Ui.GRefresh));
+            s.Children.Add(Forms.Btn("Bought This — Add to Stock…", (_, _) =>
+            {
+                if (new BoughtWindow(existing, p.PriceGuessed ? null : p.Price) { Owner = Window.GetWindow(this) }.ShowDialog() == true)
+                {
+                    ShowPage(p);
+                    SetStatus("Added to stock. The website's count updates on the next sync.", "OkBrush");
+                }
+            }, primary: true, glyph: Ui.GCheck));
+            s.Children.Add(new Border { Height = 8 });
+            s.Children.Add(Forms.Btn("Update My Part From This Page", (_, _) => UpdatePart(existing, p), glyph: Ui.GRefresh));
         }
         else
         {

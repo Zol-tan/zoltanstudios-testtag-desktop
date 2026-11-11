@@ -275,6 +275,7 @@ function buildCertificateHTML(job) {
       </thead>
       <tbody>${rows}</tbody>
     </table>
+    ${fixedRcdSectionHtml(job)}
     <div class="declaration">
       <h3>Statutory Declaration</h3>
       <p>
@@ -363,6 +364,7 @@ function buildRecordHTML(job) {
       </thead>
       <tbody>${rows}</tbody>
     </table>
+    ${fixedRcdSectionHtml(job)}
     <div class="footer-note">
       Internal working record &mdash; not a signed compliance certificate. Job ID: ${escapeHtml(job.id)}.
       Exported ${escapeHtml(formatDisplayDate(new Date().toISOString().slice(0, 10)))}.
