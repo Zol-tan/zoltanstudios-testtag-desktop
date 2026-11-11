@@ -108,15 +108,15 @@ public sealed class PricingModule : ModuleBase
         var wrap = new WrapPanel();
         wrap.Children.Add(PriceCard("Test & Tag", Ui.GBolt, "AccentBrush", new[]
         {
-            ("Call-out (includes first " + r.CallOutIncludes + " items)", Money(r.CallOut)),
-            ($"Standard item, {r.CallOutIncludes + 1}–99 items", Money(r.PerItemStandard)),
+            (r.CallOutLabel(), Money(r.CallOut)),
+            (r.CallOutIncludes > 0 ? $"Standard item, {r.CallOutIncludes + 1}–99 items" : "Standard item (Class I/II, leads)", Money(r.PerItemStandard)),
             ("100–199 items (replaces standard rate)", Money(r.PerItem100)),
             ("200+ items", Money(r.PerItem200)),
             ("Power tool / heavy equipment", Money(r.PerItemPowerTool)),
             ("RCD / safety switch test", Money(r.PerItemRcd)),
             ("Microwave leakage test", Money(r.PerItemMicrowave)),
-            ("Quarterly / annual contract", $"{r.ContractQuarterlyPercent:0}% / {r.ContractAnnualPercent:0}% off"),
-            ($"Intro offer (up to {r.IntroOfferItems} items)", Money(r.IntroOfferPrice) + " flat"),
+            ("Quarterly / annual contract", r.ContractQuarterlyPercent + r.ContractAnnualPercent > 0 ? $"{r.ContractQuarterlyPercent:0}% / {r.ContractAnnualPercent:0}% off" : "Negotiable"),
+            ($"Intro offer (up to {r.IntroOfferItems} items)", r.IntroOfferPrice > 0 ? Money(r.IntroOfferPrice) + " flat" : "None"),
         }, "Single-phase 240 V equipment. Generators receive an inspection report (AS/NZS 3010 observations), not a compliance certificate."));
 
         wrap.Children.Add(PriceCard("3D Printing", Ui.GBox, "VioletBrush", new[]
@@ -186,13 +186,15 @@ public sealed class PricingModule : ModuleBase
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("ZoltanStudios — Test & Tag (AS/NZS 3760:2022)");
-        sb.AppendLine($"  Call-out, includes the first {r.CallOutIncludes} items: {Money(r.CallOut)}");
-        sb.AppendLine($"  Each additional standard item: {Money(r.PerItemStandard)} ({Money(r.PerItem100)} at 100+ items, {Money(r.PerItem200)} at 200+)");
+        sb.AppendLine($"  {r.CallOutLabel()}: {Money(r.CallOut)}");
+        sb.AppendLine(r.PerItem100 == r.PerItemStandard && r.PerItem200 == r.PerItemStandard
+            ? $"  Standard items: {Money(r.PerItemStandard)} each (100+ items negotiable)"
+            : $"  Each additional standard item: {Money(r.PerItemStandard)} ({Money(r.PerItem100)} at 100+ items, {Money(r.PerItem200)} at 200+)");
         sb.AppendLine($"  Power tools / heavy equipment: {Money(r.PerItemPowerTool)} each");
         sb.AppendLine($"  RCD / safety switch test: {Money(r.PerItemRcd)} each");
         sb.AppendLine($"  Microwave leakage test: {Money(r.PerItemMicrowave)} each");
-        sb.AppendLine($"  Quarterly / annual contracts: {r.ContractQuarterlyPercent:0}% / {r.ContractAnnualPercent:0}% off");
-        sb.AppendLine($"  Intro offer: {Money(r.IntroOfferPrice)} flat for up to {r.IntroOfferItems} items");
+        sb.AppendLine(r.ContractQuarterlyPercent + r.ContractAnnualPercent > 0 ? $"  Quarterly / annual contracts: {r.ContractQuarterlyPercent:0}% / {r.ContractAnnualPercent:0}% off" : "  Quarterly / annual contracts: negotiable");
+        if (r.IntroOfferPrice > 0) sb.AppendLine($"  Intro offer: {Money(r.IntroOfferPrice)} flat for up to {r.IntroOfferItems} items");
         sb.AppendLine();
         sb.AppendLine("3D Printing");
         sb.AppendLine($"  Setup {Money(r.PrintSetup)} per part; PLA {Money(r.PrintPlaPerGram)}/g, PETG {Money(r.PrintPetgPerGram)}/g, ABS {Money(r.PrintAbsPerGram)}/g, TPU {Money(r.PrintTpuPerGram)}/g");

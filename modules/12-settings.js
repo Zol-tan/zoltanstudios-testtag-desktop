@@ -209,6 +209,15 @@ const ENVIRONMENTS = [{
   months: 12
 }];
 
+// Published test and tag rates (test-and-tag.html), ex GST.
+const TT_PRICES = {
+  callOut: 30.00,
+  standard: 5.00,
+  power_tool: 8.00,
+  rcd: 10.00,
+  microwave: 12.00
+};
+
 // Item types for pricing categorisation
 const ITEM_TYPES = [{
   value: "standard",

@@ -11,18 +11,18 @@ namespace ZoltanStudios.Suite.Services;
 public sealed class Rates
 {
     // ---- Test & Tag (published on test-and-tag.html) --------------------
-    public double CallOut { get; set; } = 120;
-    public int CallOutIncludes { get; set; } = 20;
-    public double PerItemStandard { get; set; } = 3.50;
-    public double PerItemPowerTool { get; set; } = 5.00;
-    public double PerItemRcd { get; set; } = 8.00;
+    public double CallOut { get; set; } = 30;
+    public int CallOutIncludes { get; set; } = 0;
+    public double PerItemStandard { get; set; } = 5.00;
+    public double PerItemPowerTool { get; set; } = 8.00;
+    public double PerItemRcd { get; set; } = 10.00;
     public double PerItemMicrowave { get; set; } = 12.00;
-    public double PerItem100 { get; set; } = 2.90;
-    public double PerItem200 { get; set; } = 2.50;
-    public double IntroOfferPrice { get; set; } = 99;          // flat, first job
+    public double PerItem100 { get; set; } = 5.00;   // 100+ is negotiable on the site
+    public double PerItem200 { get; set; } = 5.00;
+    public double IntroOfferPrice { get; set; } = 0;           // flat, first job (0 = no offer)
     public int IntroOfferItems { get; set; } = 30;
-    public double ContractQuarterlyPercent { get; set; } = 10; // off, on a quarterly contract
-    public double ContractAnnualPercent { get; set; } = 15;
+    public double ContractQuarterlyPercent { get; set; } = 0;  // off, on a quarterly contract (0 = negotiable)
+    public double ContractAnnualPercent { get; set; } = 0;
 
     // ---- 3D printing (must match 3d-printing-services.html) -------------
     public double PrintSetup { get; set; } = 15;
@@ -93,6 +93,10 @@ public sealed class Rates
                 Convert.ToString(p.GetValue(this)) ?? "");
         }
     }
+
+    /// <summary>Call-out label: only mentions included items when there are some.</summary>
+    public string CallOutLabel(string prefix = "Call-out") =>
+        CallOutIncludes > 0 ? $"{prefix} (includes first {CallOutIncludes} items)" : prefix;
 
     /// <summary>
     /// Test and tag total for a given mix of items. The call-out covers the

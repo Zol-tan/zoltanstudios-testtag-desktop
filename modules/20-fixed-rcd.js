@@ -13,7 +13,7 @@
 // Stored on the job as job.fixedRcd and sent to the server inside extra_json,
 // so the desktop suite (which doesn't send it) can never wipe it.
 
-const FIXED_RCD_PRICE = 8.00; // published "RCD / safety switch test" rate
+const FIXED_RCD_PRICE = 10.00; // published "RCD / safety switch testing" rate (test-and-tag.html)
 const FIXED_RCD_LIMIT_MS = { I: 40, II: 300 };
 
 const FIXED_RCD_METHODS = [

@@ -100,14 +100,14 @@ public static class JobRules
         var total = items.Count;
 
         lines.Add(new InvoiceLines.Line(
-            $"Test and tag call-out - {job.SiteAddress} (includes first {rates.CallOutIncludes} items)", 1, rates.CallOut));
+            rates.CallOutLabel($"Test and tag call-out - {job.SiteAddress}"), 1, rates.CallOut));
 
         var chargeable = Math.Max(0, std - rates.CallOutIncludes);
         var rate = total >= 200 ? rates.PerItem200 : total >= 100 ? rates.PerItem100 : rates.PerItemStandard;
         if (chargeable > 0)
-            lines.Add(new InvoiceLines.Line(total >= 100
+            lines.Add(new InvoiceLines.Line(total >= 100 && rate != rates.PerItemStandard
                 ? $"Additional items tested (volume rate, {total} items total)"
-                : "Additional items tested", chargeable, rate));
+                : rates.CallOutIncludes > 0 ? "Additional items tested" : "Items tested", chargeable, rate));
         if (tools > 0) lines.Add(new InvoiceLines.Line("Power tools / heavy equipment", tools, rates.PerItemPowerTool));
         if (rcd > 0) lines.Add(new InvoiceLines.Line("RCD / safety switch testing", rcd, rates.PerItemRcd));
         if (micro > 0) lines.Add(new InvoiceLines.Line("Microwave leakage testing", micro, rates.PerItemMicrowave));

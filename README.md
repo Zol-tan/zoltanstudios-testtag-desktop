@@ -3,6 +3,7 @@
 | Folder | What |
 |---|---|
 | `modules/`, `build/`, `vendor/`, `dist/` | The Test & Tag web app (`testtag-app.html`). Source is `modules/`; `node build/build.js --css` builds `dist/`. |
+| `website/` | Public site pages kept in step with the app (`test-and-tag.html`: services, prices, FAQ, schema). Prices must match `TT_PRICES` in `modules/12-settings.js` and the Suite's `Rates.cs`. |
 | `server/` | Server code: `server/api/` is the live `public_html/api/` (without `config.php`), plus `email.php` and the verify files. |
 | `src-tauri/` | Tauri desktop wrapper that loads the live web app. Workflows: `build.yml`, `build-ios.yml`. |
 | `business-suite/` | Native Windows Business Suite (WPF, .NET 8). Workflow: `build-suite.yml`. See `business-suite/README.md`. |

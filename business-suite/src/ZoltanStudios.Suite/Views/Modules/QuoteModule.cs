@@ -109,8 +109,10 @@ public sealed class QuoteModule : ModuleBase
                 Field("tools", "Power tools", "0");
                 Field("rcd", "RCD tests", "0");
                 Field("micro", "Microwaves", "0");
-                Note($"Call-out ${_rates.CallOut:0} covers the first {_rates.CallOutIncludes} standard items. "
-                   + $"Volume rates apply from 100 items (${_rates.PerItem100:0.00}) and 200 (${_rates.PerItem200:0.00}).");
+                Note(_rates.CallOutIncludes > 0
+                    ? $"Call-out ${_rates.CallOut:0} covers the first {_rates.CallOutIncludes} standard items. "
+                      + $"Volume rates apply from 100 items (${_rates.PerItem100:0.00}) and 200 (${_rates.PerItem200:0.00})."
+                    : $"Call-out ${_rates.CallOut:0}, then ${_rates.PerItemStandard:0.00} per standard item. 100+ items are negotiable.");
                 break;
 
             case 1: // PC Building
@@ -179,7 +181,7 @@ public sealed class QuoteModule : ModuleBase
                     rcd = (int)Val("rcd"), micro = (int)Val("micro");
                 var items = std + tools + rcd + micro;
 
-                lines.Add(($"Call-out (includes first {_rates.CallOutIncludes} items)", _rates.CallOut));
+                lines.Add((_rates.CallOutLabel(), _rates.CallOut));
 
                 var chargeable = Math.Max(0, std - _rates.CallOutIncludes);
                 var rate = items >= 200 ? _rates.PerItem200
@@ -197,10 +199,12 @@ public sealed class QuoteModule : ModuleBase
                 total = lines.Sum(l => l.Amount);
 
                 // The published offers, so a phone quote doesn't miss them.
-                if (items > 0 && items <= _rates.IntroOfferItems && _rates.IntroOfferPrice < total)
+                if (_rates.IntroOfferPrice > 0 && items > 0 && items <= _rates.IntroOfferItems && _rates.IntroOfferPrice < total)
                     notes.Add($"New customer? The intro offer is ${_rates.IntroOfferPrice:0} flat for up to {_rates.IntroOfferItems} items " +
                          $"(saves ${total - _rates.IntroOfferPrice:0.00}).");
-                if (items > 0)
+                if (items >= 100 || (items > 0 && _rates.ContractQuarterlyPercent + _rates.ContractAnnualPercent == 0))
+                    notes.Add("100+ items and quarterly or annual contracts are negotiable.");
+                else if (items > 0)
                     notes.Add($"On a contract: quarterly ${total * (1 - _rates.ContractQuarterlyPercent / 100):0.00} a visit " +
                          $"({_rates.ContractQuarterlyPercent:0}% off), annual ${total * (1 - _rates.ContractAnnualPercent / 100):0.00} " +
                          $"({_rates.ContractAnnualPercent:0}% off).");

@@ -853,15 +853,15 @@ function JobFormView({
       counts[i.itemType || "standard"] = (counts[i.itemType || "standard"] || 0) + 1;
     });
     const totalItems = job.items.length;
-    // Volume tiers replace the standard rate outright, and the call-out
-    // covers the first 20 standard items - matching the published pricing
-    // and the desktop invoice, so the two can't disagree.
-    const volumeRate = totalItems >= 200 ? 2.50 : totalItems >= 100 ? 2.90 : 3.50;
-    const callOut = 120;
-    const chargeableStd = Math.max(0, counts.standard - 20);
+    // Published rates on test-and-tag.html: $30 call-out, then per item.
+    // 100+ items and contracts are negotiable, so no volume tier here.
+    const PRICES = TT_PRICES;
+    const callOut = PRICES.callOut;
+    const chargeableStd = counts.standard;
+    const volumeRate = PRICES.standard;
     const partsTotal = partsTotalFor(job.items, partsCat);
     const partsCount = job.items.filter(i => { const p = partById(partsCat, i.partId); return p && !p.consumable; }).length;
-    const itemTotal = chargeableStd * volumeRate + counts.power_tool * 5.00 + counts.rcd * 8.00 + counts.microwave * 12.00;
+    const itemTotal = chargeableStd * volumeRate + counts.power_tool * PRICES.power_tool + counts.rcd * PRICES.rcd + counts.microwave * PRICES.microwave;
     const fixedRcdCount = fixedRcdSummary(job).tested;
     const fixedRcdTotal = fixedRcdTotalPrice(job);
     const lightsCount = lightsSummary(job).pass + lightsSummary(job).fail;
@@ -875,11 +875,11 @@ function JobFormView({
       className: "font-semibold text-slate-700"
     }, "Estimated invoice"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-4 flex-wrap text-slate-600 text-xs"
-    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$120")), chargeableStd > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", chargeableStd, " after first 20: ", /*#__PURE__*/React.createElement("strong", null, "$", (chargeableStd * volumeRate).toFixed(2))), partsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Parts ×", partsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", partsTotal.toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * 5.00).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * 8.00).toFixed(2))), fixedRcdCount > 0 && /*#__PURE__*/React.createElement("span", null, "Fixed RCDs ×", fixedRcdCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", fixedRcdTotal.toFixed(2))), lightsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Emergency lights ×", lightsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", lightsTotal.toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * 12.00).toFixed(2))), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", null, "Call-out: ", /*#__PURE__*/React.createElement("strong", null, "$" + callOut.toFixed(2))), chargeableStd > 0 && /*#__PURE__*/React.createElement("span", null, "Standard ×", chargeableStd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (chargeableStd * volumeRate).toFixed(2))), partsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Parts ×", partsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", partsTotal.toFixed(2))), counts.power_tool > 0 && /*#__PURE__*/React.createElement("span", null, "Power tools ×", counts.power_tool, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.power_tool * PRICES.power_tool).toFixed(2))), counts.rcd > 0 && /*#__PURE__*/React.createElement("span", null, "RCD ×", counts.rcd, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.rcd * PRICES.rcd).toFixed(2))), fixedRcdCount > 0 && /*#__PURE__*/React.createElement("span", null, "Fixed RCDs ×", fixedRcdCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", fixedRcdTotal.toFixed(2))), lightsCount > 0 && /*#__PURE__*/React.createElement("span", null, "Emergency lights ×", lightsCount, ": ", /*#__PURE__*/React.createElement("strong", null, "$", lightsTotal.toFixed(2))), counts.microwave > 0 && /*#__PURE__*/React.createElement("span", null, "Microwave ×", counts.microwave, ": ", /*#__PURE__*/React.createElement("strong", null, "$", (counts.microwave * PRICES.microwave).toFixed(2))), /*#__PURE__*/React.createElement("span", {
       className: "font-bold text-blue-700"
     }, "Total: $", estimatedTotal.toFixed(2)))), totalItems >= 100 && /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-amber-600 mt-1"
-    }, "⚠ Volume tier applies for standard items (", totalItems >= 200 ? "$2.50" : "$2.90", "/item for ", totalItems >= 200 ? "200+" : "100–199", " items) applied."));
+    }, "100+ items: bulk rates are negotiable. This estimate is at the standard per-item rates."));
   })(), /*#__PURE__*/React.createElement(FaultPresetList, null), /*#__PURE__*/React.createElement(JobReadinessPanel, {
     job: job,
     compact: true

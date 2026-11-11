@@ -752,9 +752,9 @@ function AppliancePickerModal({
     });
   }, [query, selectedCategory]);
   const ITEM_TYPE_LABELS = {
-    standard: "Standard ($3.50)",
-    power_tool: "Power Tool ($5.00)",
-    rcd: "RCD ($8.00)",
+    standard: "Standard ($5.00)",
+    power_tool: "Power Tool ($8.00)",
+    rcd: "RCD ($10.00)",
     microwave: "Microwave ($12.00)"
   };
   return /*#__PURE__*/React.createElement("div", {

@@ -850,7 +850,7 @@ var billJob = new Job { SiteAddress = "Bill St", Items =
 var bl = JobRules.InvoiceLinesFor(billJob, testRates, PartsCatalogue.All(includeInactive: true), new());
 Check(bl.Any(l => l.Description.StartsWith("Repair part fitted") && l.Quantity == 2), "parts fitted in the web app are billed from the job's items",
     string.Join(" | ", bl.Select(l => $"{l.Description} x{l.Quantity}")));
-Check(bl[0].Rate == 120 && bl.Any(l => l.Description.StartsWith("Power tools") && l.Rate == 5) && bl.Any(l => l.Description.StartsWith("RCD") && l.Rate == 8),
+Check(bl[0].Rate == 30 && bl.Any(l => l.Description.StartsWith("Items tested") && l.Quantity == 2 && l.Rate == 5) && bl.Any(l => l.Description.StartsWith("Power tools") && l.Rate == 8) && bl.Any(l => l.Description.StartsWith("RCD") && l.Rate == 10),
     "call-out, power tool and RCD rates applied");
 
 Console.WriteLine("== Amazon");
