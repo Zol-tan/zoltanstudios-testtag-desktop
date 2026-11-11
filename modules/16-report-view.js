@@ -8,7 +8,7 @@ function ReportView({
   onBack
 }) {
   const certCounts = certificateCounts(job);
-  const shownItems = certItems(job);
+  const shownItems = gradedItems(job);
   const passCount = certCounts.pass;
   const failCount = certCounts.fail;
   const passRate = certCounts.rate;
@@ -95,7 +95,7 @@ function ReportView({
     className: "text-xl font-bold text-slate-900"
   }, "ZoltanStudios"), /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-slate-500"
-  }, "Test & Tag Compliance Certificate"))), /*#__PURE__*/React.createElement("div", {
+  }, certificateTitle(job).replace(/&amp;/g, "&")))), /*#__PURE__*/React.createElement("div", {
     className: "text-right text-xs text-slate-500"
   }, /*#__PURE__*/React.createElement("p", null, "Melbourne, Victoria, Australia"), /*#__PURE__*/React.createElement("p", null, "zoltan@zoltanstudios.au"))), job.certNumber && /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 mb-5"
@@ -157,7 +157,7 @@ function ReportView({
       className: "text-slate-400"
     }, "Next Test Due:"), " ", /*#__PURE__*/React.createElement("span", {
       className: "font-medium"
-    }, formatDisplayDate(nextTestDate))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    }, nextTestText(job))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
       className: "text-slate-400"
     }, "Tested By:"), " ", /*#__PURE__*/React.createElement("span", {
       className: "font-medium"
@@ -228,11 +228,13 @@ function ReportView({
     result: item.overallResult
   })))))), /*#__PURE__*/React.createElement(FixedRcdReportSection, {
     job: job
+  }), /*#__PURE__*/React.createElement(ServicesReportSections, {
+    job: job
   }), /*#__PURE__*/React.createElement("div", {
     className: "border-t border-slate-200 pt-4 mb-8 text-xs text-slate-600 leading-relaxed"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-semibold text-slate-800 mb-2"
-  }, "Statutory Declaration"), /*#__PURE__*/React.createElement("p", null, "I declare that the electrical equipment listed in this report has been inspected and tested in accordance with AS/NZS 3760, and that the results recorded above are a true and accurate account of the condition of each item at the time of testing. This testing has been carried out with regard to the duties and obligations set out under the Occupational Health and Safety Act 2004 (Vic) and the Occupational Health and Safety Regulations 2017. Equipment marked \"Fail\" should be removed from service, repaired, or replaced before further use.")), /*#__PURE__*/React.createElement("div", {
+  }, "Statutory Declaration"), /*#__PURE__*/React.createElement("p", null, "I declare that the electrical equipment listed in this report has been inspected and tested in accordance with " + standardsLine(job) + ", and that the results recorded above are a true and accurate account of the condition of each item at the time of testing. This testing has been carried out with regard to the duties and obligations set out under the Occupational Health and Safety Act 2004 (Vic) and the Occupational Health and Safety Regulations 2017. Equipment marked \"Fail\" should be removed from service, repaired, or replaced before further use.")), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-8 text-sm"
   }, (function () {
   var sig = '';

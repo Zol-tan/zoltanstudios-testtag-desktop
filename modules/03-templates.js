@@ -136,9 +136,10 @@ function detailsGridHtml(job, nextTestDate) {
       <div><span class="lbl">Company:</span> <span class="val">${escapeHtml(job.clientCompany) || "&mdash;"}</span></div>
       <div class="full"><span class="lbl">Site Address:</span> <span class="val">${escapeHtml(job.siteAddress) || "&mdash;"}</span></div>
       <div><span class="lbl">Test Date:</span> <span class="val">${escapeHtml(formatDisplayDate(job.testDate))}</span></div>
-      <div><span class="lbl">Next Test Due:</span> <span class="val">${escapeHtml(formatDisplayDate(nextTestDate))}</span></div>
+      <div><span class="lbl">Next Test Due:</span> <span class="val">${escapeHtml(nextTestText(job))}</span></div>
       <div><span class="lbl">Tested By:</span> <span class="val">${escapeHtml(job.testerName)}</span></div>
       <div><span class="lbl">Licence / Qual. No.:</span> <span class="val">${escapeHtml(job.testerLicense)}</span></div>
+      <div class="full"><span class="lbl">Standard:</span> <span class="val">${standardsLine(job)}</span></div>
       ${tagColour ? `<div><span class="lbl">Tag Colour:</span> <span class="val">${escapeHtml(tagColour.name)}</span></div>` : ""}
     </div>`;
 }
@@ -230,7 +231,7 @@ function attachmentsHtml(job) {
 
 function buildCertificateHTML(job) {
   const nextTestDate = addMonths(job.testDate, job.retestMonths);
-  const items = certItems(job);
+  const items = gradedItems(job);
   const cc = certificateCounts(job);
   const failedItems = items.filter(i => i.overallResult === "fail");
   const tiles = `
@@ -260,7 +261,7 @@ function buildCertificateHTML(job) {
         <span style="font-family:monospace;font-size:22px;font-weight:800;color:#1d4ed8;letter-spacing:0.15em;">${escapeHtml(job.certNumber)}</span>
        </div>` : "";
   const body = `
-    ${letterheadHtml("Test &amp; Tag Compliance Certificate")}
+    ${letterheadHtml(certificateTitle(job))}
     ${draftBannerHtml(job)}
     ${certNumBanner}
     ${tiles}
@@ -276,11 +277,13 @@ function buildCertificateHTML(job) {
       <tbody>${rows}</tbody>
     </table>` : ""}
     ${fixedRcdSectionHtml(job)}
+    ${lightsSectionHtml(job)}
+    ${servicesItemSectionsHtml(job)}
     <div class="declaration">
       <h3>Statutory Declaration</h3>
       <p>
         I declare that the electrical equipment listed in this report has been inspected and
-        tested in accordance with AS/NZS 3760, and that the results recorded above are a true and
+        tested in accordance with ${standardsLine(job)}, and that the results recorded above are a true and
         accurate account of the condition of each item at the time of testing. This testing has
         been carried out with regard to the duties and obligations set out under the Occupational
         Health and Safety Act 2004 (Vic) and the Occupational Health and Safety Regulations 2017.
@@ -377,6 +380,8 @@ function buildRecordHTML(job) {
       <tbody>${rows}</tbody>
     </table>
     ${fixedRcdSectionHtml(job)}
+    ${lightsSectionHtml(job)}
+    ${servicesItemSectionsHtml(job)}
     <div class="footer-note">
       Internal working record &mdash; not a signed compliance certificate. Job ID: ${escapeHtml(job.id)}.
       Exported ${escapeHtml(formatDisplayDate(new Date().toISOString().slice(0, 10)))}.

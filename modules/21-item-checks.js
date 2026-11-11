@@ -41,7 +41,7 @@ const REPAIR_TYPES = [
 
 // Fields that live only in the apps (no tt_items column). They travel to the
 // server as job.itemExtras, keyed by the item's permanent qrId.
-const ITEM_EXTRA_FIELDS = ["checksVersion", "visualChecks", "polarity", "cordLength", "faultDescription",
+const ITEM_EXTRA_FIELDS = ["checksVersion", "medical", "saleUntested", "visualChecks", "polarity", "cordLength", "faultDescription",
   "repairType", "plugRating", "repairDetails", "removedFromService", "followUp"];
 
 function itemExtrasFor(items) {
@@ -93,6 +93,7 @@ function visualFailed(it) {
 
 function missingReadings(it) {
   if (!usesGuidedChecks(it) || isUnusedItem(it)) return [];
+  if (it.medical || it.saleUntested) return []; // referred / sold untested: not graded
   if (visualFailed(it)) return []; // stop at the visual: no electrical tests on a damaged item
   const need = [];
   const vc = it.visualChecks || {};
@@ -114,6 +115,8 @@ function missingReadings(it) {
 // "pending" | "pass" | "fail"
 function itemStatus(it) {
   if (!it) return "pending";
+  if (it.medical) return "referred";
+  if (it.saleUntested) return "untested";
   if (it.overrideResult) return it.overallResult === "fail" ? "fail" : "pass";
   if (it.overallResult === "fail") return "fail";
   return missingReadings(it).length ? "pending" : "pass";
@@ -171,7 +174,7 @@ function calibrationState(dateStr, testDate) {
 
 function jobReadiness(job) {
   const blocking = [], warnings = [];
-  certItems(job).forEach(it => {
+  gradedItems(job).forEach(it => {
     const label = (it.assetId || "Untagged") + (it.description ? " " + it.description : "");
     const need = itemIssues(it);
     if (need.length) blocking.push(label + ": " + need.join(", "));
@@ -193,6 +196,10 @@ function jobReadiness(job) {
     }
   });
 
+  emergencyLightsOf(job).rows.forEach(r => {
+    if (gradeLight(r) === "") blocking.push("Light " + (r.fittingId || "") + (r.location ? " (" + r.location + ")" : "") + ": result");
+  });
+
   const t = effectiveTester();
   const patCal = (f.rows.length && f.calDate) || t.testEquipmentCalibrationDate;
   const patState = calibrationState(patCal, job.testDate);
@@ -207,9 +214,13 @@ function jobReadiness(job) {
 // ---------------------------------------------------------------------------
 // UI: the guidance row under each item
 // ---------------------------------------------------------------------------
-function ItemChecksRow({ item, onChange, parts, inputCls }) {
+function ItemChecksRow({ item, job, onChange, parts, inputCls }) {
   const e = React.createElement;
   if (!usesGuidedChecks(item)) return null;
+  if (item.medical || item.saleUntested) {
+    return e("tr", { className: "border-b border-slate-100 bg-slate-50" }, e("td", null),
+      e("td", { colSpan: 9, className: "py-2 px-2 text-xs" }, e(ServicesItemFlags, { item, job, onChange })));
+  }
   const vc = item.visualChecks || {};
   const status = itemStatus(item);
   const missing = missingReadings(item);
@@ -258,6 +269,7 @@ function ItemChecksRow({ item, onChange, parts, inputCls }) {
     e("td", null),
     e("td", { colSpan: 9, className: "py-2 px-2" },
       e("div", { className: "flex flex-col gap-2 text-xs text-slate-700" },
+        e(ServicesItemFlags, { item, job, onChange }),
         // Visual checklist
         e("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1.5" },
           e("span", { className: "font-semibold text-slate-500 uppercase tracking-wide text-[10px]" }, "Visual"),

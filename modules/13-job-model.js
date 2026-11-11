@@ -205,6 +205,9 @@ async function persistJobs(jobs) {
 function ResultBadge({
   result
 }) {
+  if (result === "referred" || result === "untested") return /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-200 text-slate-700"
+  }, result === "referred" ? "REFER" : "UNTESTED");
   if (result === "pending") return /*#__PURE__*/React.createElement("span", {
     className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"
   }, "PENDING");

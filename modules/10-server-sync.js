@@ -31,6 +31,8 @@ function jobToServerPayload(job) {
     jobType: job.jobType || "test_tag",
     generator: job.generator || null,
     fixedRcd: job.fixedRcd || null,
+    siteMode: job.siteMode || "",
+    emergencyLights: job.emergencyLights || null,
     // App-only item fields (visual checklist, polarity, fault, repair...).
     itemExtras: itemExtrasFor(job.items),
     attachments: job.attachments || [],
@@ -88,6 +90,8 @@ function serverJobToLocal(j) {
     generator: j.generator || blankGenerator(),
     // Older server copies have none; fixedRcdOf() fills the defaults on use.
     fixedRcd: j.fixedRcd || null,
+    siteMode: j.siteMode || "",
+    emergencyLights: j.emergencyLights || null,
     attachments: j.attachments || [],
     meggerEquipment: j.meggerEquipment || "",
     meggerCalibrationDate: j.meggerCalibrationDate || "",

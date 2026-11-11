@@ -79,6 +79,7 @@ function fixedRcdSummary(job) {
   return { total: rows.length, pass, fail, nt, pending, tested: pass + fail };
 }
 
+function fixedRcdTotalPriceAll(job) { return fixedRcdTotalPrice(job) + lightsTotalPrice(job); }
 function fixedRcdTotalPrice(job) {
   return fixedRcdSummary(job).tested * FIXED_RCD_PRICE;
 }
@@ -102,7 +103,7 @@ function certItems(job) {
 // Headline numbers for the certificate: items AND fixed RCDs, so a failed
 // safety switch can never sit under "0 failed, 100% pass".
 function certificateCounts(job) {
-  const items = certItems(job);
+  const items = gradedItems(job);
   const r = fixedRcdSummary(job);
   const itemPass = items.filter(i => i.overallResult === "pass").length;
   const itemFail = items.filter(i => i.overallResult === "fail").length;
